@@ -362,6 +362,9 @@
 .post-nickname {
     font-weight: 600;
     color: var(--admin-accent);
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .post-rp-name {
@@ -392,6 +395,9 @@
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .post-actions {
@@ -498,16 +504,38 @@
         flex-direction: column;
         align-items: flex-start;
         gap: 0.75rem;
+        padding: 1rem;
+    }
+
+    .post-details {
+        width: 100%;
+        min-width: 0;
     }
 
     .post-meta {
         flex-direction: column;
         align-items: flex-start;
         gap: 0.5rem;
+        width: 100%;
+    }
+
+    .post-nickname,
+    .post-rp-name,
+    .post-message {
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        hyphens: auto;
+        max-width: 100%;
+    }
+
+    .post-message {
+        max-height: none;
+        -webkit-line-clamp: 2;
     }
 
     .post-actions {
         align-self: flex-end;
+        margin-top: 0.5rem;
     }
 }
 

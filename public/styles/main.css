@@ -286,6 +286,9 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1.5rem;
     padding: 1rem 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 /* Pin Card */
@@ -298,6 +301,9 @@ h1, h2, h3, h4, h5, h6 {
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.3);
     backdrop-filter: blur(10px);
+    overflow: hidden;
+    word-wrap: break-word;
+    max-width: 100%;
 }
 
 .pin-card:hover {
@@ -316,6 +322,10 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     color: var(--sunset-purple);
     font-size: 1.1rem;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
 }
 
 .pin-timestamp {
@@ -328,7 +338,11 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-primary);
     line-height: 1.6;
     word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
     margin-bottom: 1rem;
+    max-width: 100%;
 }
 
 .pin-actions {
@@ -617,10 +631,35 @@ h1, h2, h3, h4, h5, h6 {
 
     .pin-card {
         padding: 1rem;
+        min-width: 0;
+    }
+
+    .pins-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        padding: 0.5rem 0;
     }
 
     .logo {
         font-size: 1.25rem;
+    }
+
+    .pin-nickname,
+    .pin-message {
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        hyphens: auto;
+    }
+
+    .pin-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .pin-timestamp {
+        white-space: normal;
+        text-align: right;
+        min-width: 0;
     }
 }
 

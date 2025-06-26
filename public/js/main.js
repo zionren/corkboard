@@ -484,7 +484,7 @@ class CorkboardApp {
         };
         
         // Validation
-        if (!formData.nickname || !formData.main || !formData.message) {
+        if (!formData.rpName || !formData.nickname || !formData.main || !formData.message) {
             this.showError('Please fill in all required fields');
             return;
         }

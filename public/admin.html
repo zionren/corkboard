@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Gazelvouer Academy</title>
+    <link rel="stylesheet" href="styles/admin.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <i class="fas fa-user-shield"></i>
+                <h2>Admin Login</h2>
+                <p>Access the administrative dashboard</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Login
+                </button>
+            </form>
+            <div class="back-link">
+                <a href="/" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Academy
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" class="admin-dashboard hidden">
+        <!-- Header -->
+        <header class="admin-header">
+            <div class="container">
+                <h1 class="logo">
+                    <i class="fas fa-cogs"></i>
+                    Gazelvouer Academy | Admin Dashboard
+                </h1>
+                <div class="header-actions">
+                    <button id="refresh-data" class="btn btn-secondary">
+                        <i class="fas fa-sync-alt"></i>
+                        Refresh
+                    </button>
+                    <button id="logout-btn" class="btn btn-danger">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="admin-nav">
+            <div class="container">
+                <button class="nav-btn active" data-tab="dashboard">
+                    <i class="fas fa-chart-pie"></i>
+                    Dashboard
+                </button>
+                <button class="nav-btn" data-tab="posts">
+                    <i class="fas fa-thumbtack"></i>
+                    Posts Management
+                </button>
+            </div>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content active">
+            <div class="container">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-thumbtack"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="total-posts">0</h3>
+                            <p>Total Posts Today</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="unique-users">0</h3>
+                            <p>Unique Users Today</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="recent-posts">0</h3>
+                            <p>Posts Last Hour</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h3>Posts by Main (Today)</h3>
+                        </div>
+                        <canvas id="mains-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h3>Posts Timeline (Today)</h3>
+                        </div>
+                        <canvas id="timeline-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Posts Management Tab -->
+        <div id="posts-tab" class="tab-content">
+            <div class="container">
+                <div class="posts-controls">
+                    <div class="filters">
+                        <select id="admin-main-filter">
+                            <option value="">All Mains</option>
+                            <option value="1">Main 1</option>
+                            <option value="2">Main 2</option>
+                            <option value="3">Main 3</option>
+                            <option value="4">Main 4</option>
+                            <option value="council">Council</option>
+                        </select>
+                        <select id="admin-sort-filter">
+                            <option value="newest">Most Recent</option>
+                            <option value="oldest">Oldest</option>
+                            <option value="a-z">A-Z (Nickname)</option>
+                            <option value="z-a">Z-A (Nickname)</option>
+                        </select>
+                        <input type="text" id="admin-search" placeholder="Search posts...">
+                    </div>
+                    <div class="actions">
+                        <button id="select-all" class="btn btn-secondary">
+                            <i class="fas fa-check-square"></i>
+                            Select All
+                        </button>
+                        <button id="delete-selected" class="btn btn-danger" disabled>
+                            <i class="fas fa-trash"></i>
+                            Delete Selected
+                        </button>
+                        <button id="export-pdf" class="btn btn-primary">
+                            <i class="fas fa-file-pdf"></i>
+                            Export PDF
+                        </button>
+                    </div>
+                </div>
+
+                <div class="posts-list">
+                    <div id="admin-loading" class="loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Loading posts...</p>
+                    </div>
+                    <div id="admin-empty-state" class="empty-state hidden">
+                        <i class="fas fa-inbox"></i>
+                        <h3>No posts found</h3>
+                        <p>No posts match your current filters.</p>
+                    </div>
+                    <div id="admin-posts-container">
+                        <!-- Posts will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="admin-confirm-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Deletion</h3>
+                <button class="modal-close" onclick="closeAdminConfirmModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="admin-confirm-message">Are you sure you want to delete the selected posts?</p>
+                <p class="warning">This action cannot be undone.</p>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-secondary" onclick="closeAdminConfirmModal()">Cancel</button>
+                <button id="admin-confirm-action" class="btn btn-danger">
+                    <i class="fas fa-trash"></i>
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="admin-error-toast" class="toast error hidden">
+        <i class="fas fa-exclamation-circle"></i>
+        <span id="admin-error-message">An error occurred</span>
+        <button onclick="hideAdminToast('admin-error-toast')">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div id="admin-success-toast" class="toast success hidden">
+        <i class="fas fa-check-circle"></i>
+        <span id="admin-success-message">Action completed successfully</span>
+        <button onclick="hideAdminToast('admin-success-toast')">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <script src="js/supabase-client.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "corkboard-app",
   "builds": [
     {
       "src": "server.js",
@@ -10,14 +9,27 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/server.js"
+      "dest": "server.js"
+    },
+    {
+      "src": "/admin",
+      "dest": "server.js"
+    },
+    {
+      "src": "/styles/(.*)",
+      "dest": "server.js"
+    },
+    {
+      "src": "/js/(.*)",
+      "dest": "server.js"
+    },
+    {
+      "src": "/images/(.*)",
+      "dest": "server.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/server.js"
+      "dest": "server.js"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }

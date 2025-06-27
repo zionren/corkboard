@@ -194,26 +194,6 @@ class ChartsManager {
                         }
                     }
                 },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1,
-                            precision: 0
-                        },
-                        grid: {
-                            color: 'rgba(108, 92, 231, 0.1)'
-                        }
-                    },
-                    y: {
-                        grid: {
-                            display: false
-                        },
-                        ticks: {
-                            maxTicksLimit: 12
-                        }
-                    }
-                },
                 animation: {
                     duration: 750,
                     easing: 'easeInOutQuart'

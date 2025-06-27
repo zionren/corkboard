@@ -81,7 +81,7 @@ class ChartsManager {
                     legend: {
                         position: 'bottom',
                         labels: {
-                            padding: 15,
+                            padding: 20,
                             usePointStyle: true,
                             pointStyle: 'circle',
                             font: {

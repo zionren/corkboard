@@ -371,6 +371,110 @@ class SupabaseClient {
 
         return data || [];
     }
+
+    /**
+     * Get analytics data for admin dashboard with date range support
+     */
+    async getAnalyticsData(dateRange) {
+        this.ensureInitialized();
+        
+        let query = this.client.from('pins').select('*');
+        
+        // Apply date range filters
+        if (dateRange.startDate && dateRange.endDate) {
+            query = query
+                .gte('created_at', dateRange.startDate.toISOString())
+                .lte('created_at', dateRange.endDate.toISOString());
+        }
+        
+        const { data: posts, error } = await query;
+        
+        if (error) {
+            console.error('Error fetching analytics data:', error);
+            throw error;
+        }
+        
+        // Calculate statistics
+        const mainCounts = { '1': 0, '2': 0, '3': 0, '4': 0, 'council': 0 };
+        const uniqueUsers = new Set();
+        let hourlyData = Array(24).fill(0);
+        let dailyData = {};
+        
+        // If cumulative mode and date range spans multiple days, organize by day
+        if (dateRange.cumulative && dateRange.startDate && dateRange.endDate) {
+            const diffTime = Math.abs(dateRange.endDate - dateRange.startDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays > 1) {
+                // Group by day for cumulative view
+                for (let i = 0; i < diffDays; i++) {
+                    const date = new Date(dateRange.startDate);
+                    date.setDate(date.getDate() + i);
+                    const dateKey = date.toISOString().split('T')[0];
+                    dailyData[dateKey] = 0;
+                }
+            }
+        }
+        
+        posts.forEach(post => {
+            // Count by main
+            if (mainCounts.hasOwnProperty(post.main)) {
+                mainCounts[post.main]++;
+            }
+            
+            // Count unique users
+            uniqueUsers.add(post.author_id);
+            
+            // For timeline data
+            const postDate = new Date(post.created_at);
+            
+            if (dateRange.cumulative && Object.keys(dailyData).length > 0) {
+                // Cumulative daily data
+                const dateKey = postDate.toISOString().split('T')[0];
+                if (dailyData.hasOwnProperty(dateKey)) {
+                    dailyData[dateKey]++;
+                }
+            } else {
+                // Hourly data for single day or non-cumulative
+                const hour = postDate.getHours();
+                hourlyData[hour]++;
+            }
+        });
+        
+        // Convert daily data to cumulative if needed
+        if (dateRange.cumulative && Object.keys(dailyData).length > 0) {
+            const sortedDates = Object.keys(dailyData).sort();
+            let cumulative = 0;
+            const cumulativeData = {};
+            
+            sortedDates.forEach(date => {
+                cumulative += dailyData[date];
+                cumulativeData[date] = cumulative;
+            });
+            
+            // Convert to array format for charts
+            hourlyData = sortedDates.map(date => cumulativeData[date]);
+        }
+        
+        // Get recent posts (last hour) only for today
+        let recentPosts = 0;
+        if (dateRange.preset === 'today') {
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            recentPosts = posts.filter(post => 
+                new Date(post.created_at) >= oneHourAgo
+            ).length;
+        }
+        
+        return {
+            totalPosts: posts.length,
+            uniqueUsers: uniqueUsers.size,
+            recentPosts,
+            mainCounts,
+            hourlyData,
+            dailyData: Object.keys(dailyData).length > 0 ? dailyData : null,
+            posts
+        };
+    }
 }
 
 // Create global instance

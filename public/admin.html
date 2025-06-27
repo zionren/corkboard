@@ -111,16 +111,43 @@
                     </div>
                 </div>
 
+                <!-- Date Range Controls -->
+                <div class="date-controls">
+                    <div class="container">
+                        <div class="date-range-wrapper">
+                            <div class="date-presets">
+                                <button class="date-preset-btn active" data-preset="today">Today</button>
+                                <button class="date-preset-btn" data-preset="yesterday">Yesterday</button>
+                                <button class="date-preset-btn" data-preset="week">This Week</button>
+                                <button class="date-preset-btn" data-preset="month">This Month</button>
+                                <button class="date-preset-btn" data-preset="all">All Time</button>
+                            </div>
+                            <div class="custom-date-range">
+                                <input type="date" id="start-date" />
+                                <span>to</span>
+                                <input type="date" id="end-date" />
+                                <button class="btn btn-primary" id="apply-date-range">Apply</button>
+                            </div>
+                            <div class="chart-mode-toggle">
+                                <label>
+                                    <input type="checkbox" id="cumulative-mode" />
+                                    <span>Show Cumulative Data</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="charts-grid">
                     <div class="chart-container">
                         <div class="chart-header">
-                            <h3>Posts by Main (Today)</h3>
+                            <h3 id="mains-chart-title">Posts by Main (Today)</h3>
                         </div>
                         <canvas id="mains-chart"></canvas>
                     </div>
                     <div class="chart-container">
                         <div class="chart-header">
-                            <h3>Posts Timeline (Today)</h3>
+                            <h3 id="timeline-chart-title">Posts Timeline (Today)</h3>
                         </div>
                         <canvas id="timeline-chart"></canvas>
                     </div>

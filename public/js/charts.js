@@ -188,11 +188,11 @@ class ChartsManager {
     /**
      * Update charts with new data
      */
-    updateCharts(analyticsData) {
+    updateCharts(analyticsData, dateRange = {}) {
         if (!analyticsData) return;
 
         this.updateMainsChart(analyticsData.mainCounts);
-        this.updateTimelineChart(analyticsData.hourlyData);
+        this.updateTimelineChart(analyticsData, dateRange);
     }
 
     /**
@@ -216,10 +216,50 @@ class ChartsManager {
     /**
      * Update the timeline chart
      */
-    updateTimelineChart(hourlyData) {
-        if (!this.charts.timeline || !hourlyData) return;
+    updateTimelineChart(analyticsData, dateRange = {}) {
+        if (!this.charts.timeline || !analyticsData) return;
 
-        this.charts.timeline.data.datasets[0].data = hourlyData;
+        let labels, data, label;
+        
+        // Check if we should show daily cumulative data
+        if (dateRange.cumulative && analyticsData.dailyData) {
+            // Daily cumulative data
+            const sortedDates = Object.keys(analyticsData.dailyData).sort();
+            labels = sortedDates.map(date => {
+                const d = new Date(date);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+            data = analyticsData.hourlyData; // This contains cumulative values
+            label = 'Cumulative Posts';
+            
+            // Change chart to horizontal bar for better date display
+            this.charts.timeline.config.options.indexAxis = 'y';
+        } else {
+            // Hourly data (default)
+            labels = Array.from({length: 24}, (_, i) => {
+                const hour = i.toString().padStart(2, '0');
+                return `${hour}:00`;
+            });
+            data = analyticsData.hourlyData || Array(24).fill(0);
+            label = 'Posts';
+            
+            // Set chart to horizontal bar
+            this.charts.timeline.config.options.indexAxis = 'y';
+        }
+        
+        this.charts.timeline.data.labels = labels;
+        this.charts.timeline.data.datasets[0].data = data;
+        this.charts.timeline.data.datasets[0].label = label;
+        
+        // Update chart styling based on mode
+        if (dateRange.cumulative && analyticsData.dailyData) {
+            this.charts.timeline.data.datasets[0].backgroundColor = 'rgba(116, 185, 255, 0.8)';
+            this.charts.timeline.data.datasets[0].borderColor = 'rgba(116, 185, 255, 1)';
+        } else {
+            this.charts.timeline.data.datasets[0].backgroundColor = 'rgba(108, 92, 231, 0.8)';
+            this.charts.timeline.data.datasets[0].borderColor = 'rgba(108, 92, 231, 1)';
+        }
+        
         this.charts.timeline.update('active');
     }
 

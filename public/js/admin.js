@@ -12,6 +12,14 @@ class AdminDashboard {
         this.selectedPosts = new Set();
         this.analyticsData = null;
         
+        // Date range for analytics
+        this.dateRange = {
+            preset: 'today',
+            startDate: null,
+            endDate: null,
+            cumulative: false
+        };
+        
         // Filters for posts management
         this.filters = {
             search: '',
@@ -75,6 +83,15 @@ class AdminDashboard {
             uniqueUsers: document.getElementById('unique-users'),
             recentPosts: document.getElementById('recent-posts'),
             
+            // Date controls
+            datePresetBtns: document.querySelectorAll('.date-preset-btn'),
+            startDate: document.getElementById('start-date'),
+            endDate: document.getElementById('end-date'),
+            applyDateRange: document.getElementById('apply-date-range'),
+            cumulativeMode: document.getElementById('cumulative-mode'),
+            mainsChartTitle: document.getElementById('mains-chart-title'),
+            timelineChartTitle: document.getElementById('timeline-chart-title'),
+            
             // Posts management elements
             adminMainFilter: document.getElementById('admin-main-filter'),
             adminSortFilter: document.getElementById('admin-sort-filter'),
@@ -126,6 +143,13 @@ class AdminDashboard {
         this.elements.selectAll.addEventListener('click', () => this.toggleSelectAll());
         this.elements.deleteSelected.addEventListener('click', () => this.confirmDeleteSelected());
         this.elements.exportPdf.addEventListener('click', () => this.exportToPdf());
+        
+        // Date controls
+        this.elements.datePresetBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => this.handleDatePreset(e.target.dataset.preset));
+        });
+        this.elements.applyDateRange.addEventListener('click', () => this.applyCustomDateRange());
+        this.elements.cumulativeMode.addEventListener('change', (e) => this.toggleCumulativeMode(e.target.checked));
         
         // Modal close handlers
         this.elements.adminConfirmModal.addEventListener('click', (e) => {
@@ -427,64 +451,522 @@ class AdminDashboard {
     }
 
     /**
-     * Toggle post selection
+     * Handle date preset selection
      */
-    togglePostSelection(postId) {
-        if (this.selectedPosts.has(postId)) {
-            this.selectedPosts.delete(postId);
-        } else {
-            this.selectedPosts.add(postId);
+    handleDatePreset(preset) {
+        // Update active button
+        this.elements.datePresetBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.preset === preset);
+        });
+        
+        this.dateRange.preset = preset;
+        
+        // Calculate date range based on preset
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        switch (preset) {
+            case 'today':
+                this.dateRange.startDate = today;
+                this.dateRange.endDate = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
+                break;
+            case 'yesterday':
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                this.dateRange.startDate = yesterday;
+                this.dateRange.endDate = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1);
+                break;
+            case 'week':
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay());
+                this.dateRange.startDate = startOfWeek;
+                this.dateRange.endDate = now;
+                break;
+            case 'month':
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                this.dateRange.startDate = startOfMonth;
+                this.dateRange.endDate = now;
+                break;
+            case 'all':
+                this.dateRange.startDate = null;
+                this.dateRange.endDate = null;
+                break;
         }
+        
+        this.updateChartTitles();
+        this.loadAnalyticsData();
+    }
+    
+    /**
+     * Apply custom date range
+     */
+    applyCustomDateRange() {
+        const startDateValue = this.elements.startDate.value;
+        const endDateValue = this.elements.endDate.value;
+        
+        if (!startDateValue || !endDateValue) {
+            this.showError('Please select both start and end dates');
+            return;
+        }
+        
+        const startDate = new Date(startDateValue);
+        const endDate = new Date(endDateValue + ' 23:59:59');
+        
+        if (startDate > endDate) {
+            this.showError('Start date must be before end date');
+            return;
+        }
+        
+        // Clear preset selection
+        this.elements.datePresetBtns.forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        this.dateRange.preset = 'custom';
+        this.dateRange.startDate = startDate;
+        this.dateRange.endDate = endDate;
+        
+        this.updateChartTitles();
+        this.loadAnalyticsData();
+    }
+    
+    /**
+     * Toggle cumulative mode
+     */
+    toggleCumulativeMode(enabled) {
+        this.dateRange.cumulative = enabled;
+        this.updateChartTitles();
+        chartsManager.updateCharts(this.analyticsData, this.dateRange);
+    }
+    
+    /**
+     * Update chart titles based on current date range
+     */
+    updateChartTitles() {
+        let dateText = '';
+        const cumulativeText = this.dateRange.cumulative ? 'Cumulative ' : '';
+        
+        switch (this.dateRange.preset) {
+            case 'today':
+                dateText = 'Today';
+                break;
+            case 'yesterday':
+                dateText = 'Yesterday';
+                break;
+            case 'week':
+                dateText = 'This Week';
+                break;
+            case 'month':
+                dateText = 'This Month';
+                break;
+            case 'all':
+                dateText = 'All Time';
+                break;
+            case 'custom':
+                const startStr = this.dateRange.startDate.toLocaleDateString();
+                const endStr = this.dateRange.endDate.toLocaleDateString();
+                dateText = `${startStr} - ${endStr}`;
+                break;
+        }
+        
+        this.elements.mainsChartTitle.textContent = `${cumulativeText}Posts by Main (${dateText})`;
+        this.elements.timelineChartTitle.textContent = `${cumulativeText}Posts Timeline (${dateText})`;
+    }
+    
+    /**
+     * Load analytics data for current date range
+     */
+    async loadAnalyticsData() {
+        try {
+            // Get analytics data with date range
+            this.analyticsData = await supabaseClient.getAnalyticsData(this.dateRange);
+            
+            // Update stats
+            this.updateStats();
+            
+            // Update charts
+            chartsManager.updateCharts(this.analyticsData, this.dateRange);
+            
+        } catch (error) {
+            console.error('Error loading analytics data:', error);
+            this.showError('Failed to load analytics data');
+        }
+    }
+    
+    /**
+     * Update statistics display
+     */
+    updateStats() {
+        if (!this.analyticsData) return;
+        
+        this.elements.totalPosts.textContent = this.analyticsData.totalPosts || 0;
+        this.elements.uniqueUsers.textContent = this.analyticsData.uniqueUsers || 0;
+        this.elements.recentPosts.textContent = this.analyticsData.recentPosts || 0;
+    }
+
+    /**
+     * Logout admin
+     */
+    logout() {
+        this.isAuthenticated = false;
+        this.currentTab = 'dashboard';
+        this.posts = [];
+        this.filteredPosts = [];
+        this.selectedPosts.clear();
+        this.analyticsData = null;
+        
+        // Reset forms
+        this.elements.loginForm.reset();
+        
+        // Destroy charts
+        chartsManager.destroyCharts();
+        
+        // Show login screen
+        this.showLoginScreen();
+        
+        this.showSuccess('Logged out successfully');
+    }
+
+    /**
+     * Switch between dashboard tabs
+     */
+    switchTab(tabName) {
+        // Update navigation
+        this.elements.navButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+        
+        // Update tab content
+        this.elements.dashboardTab.classList.toggle('active', tabName === 'dashboard');
+        this.elements.postsTab.classList.toggle('active', tabName === 'posts');
+        
+        this.currentTab = tabName;
+        
+        // Load tab-specific data
+        if (tabName === 'posts') {
+            this.loadPostsData();
+        } else if (tabName === 'dashboard') {
+            this.loadDashboardData();
+        }
+    }
+
+    /**
+     * Load dashboard analytics data
+     */
+    async loadDashboardData() {
+        try {
+            this.analyticsData = await supabaseClient.getAnalytics();
+            this.updateDashboardStats();
+            chartsManager.updateCharts(this.analyticsData);
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+            this.showError('Failed to load dashboard data');
+        }
+    }
+
+    /**
+     * Update dashboard statistics
+     */
+    updateDashboardStats() {
+        if (!this.analyticsData) return;
+        
+        this.elements.totalPosts.textContent = this.analyticsData.totalPosts;
+        this.elements.uniqueUsers.textContent = this.analyticsData.uniqueUsers;
+        this.elements.recentPosts.textContent = this.analyticsData.recentPosts;
+    }
+
+    /**
+     * Load posts management data
+     */
+    async loadPostsData() {
+        try {
+            this.showAdminLoading();
+            this.posts = await supabaseClient.getAllPinsForAdmin(this.filters);
+            this.applyPostsFilters();
+            this.renderPosts();
+        } catch (error) {
+            console.error('Error loading posts data:', error);
+            this.showError('Failed to load posts data');
+        } finally {
+            this.hideAdminLoading();
+        }
+    }
+
+    /**
+     * Apply filters to posts
+     */
+    applyPostsFilters() {
+        this.filteredPosts = this.posts.filter(post => {
+            // Search filter
+            if (this.filters.search) {
+                const searchLower = this.filters.search.toLowerCase();
+                const matchesSearch = 
+                    post.nickname.toLowerCase().includes(searchLower) ||
+                    post.message.toLowerCase().includes(searchLower) ||
+                    (post.rp_name && post.rp_name.toLowerCase().includes(searchLower));
+                if (!matchesSearch) return false;
+            }
+            
+            // Main filter
+            if (this.filters.main && post.main !== this.filters.main) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Apply sorting
+        this.filteredPosts.sort((a, b) => {
+            switch (this.filters.sort) {
+                case 'newest':
+                    return new Date(b.created_at) - new Date(a.created_at);
+                case 'oldest':
+                    return new Date(a.created_at) - new Date(b.created_at);
+                case 'a-z':
+                    return a.nickname.localeCompare(b.nickname);
+                case 'z-a':
+                    return b.nickname.localeCompare(a.nickname);
+                default:
+                    return new Date(b.created_at) - new Date(a.created_at);
+            }
+        });
+    }
+
+    /**
+     * Render posts in admin interface
+     */
+    renderPosts() {
+        if (this.filteredPosts.length === 0) {
+            this.elements.adminPostsContainer.classList.add('hidden');
+            this.elements.adminEmptyState.classList.remove('hidden');
+            return;
+        }
+        
+        this.elements.adminEmptyState.classList.add('hidden');
+        this.elements.adminPostsContainer.classList.remove('hidden');
+        
+        this.elements.adminPostsContainer.innerHTML = this.filteredPosts
+            .map(post => this.createAdminPostHTML(post))
+            .join('');
+        
         this.updateSelectedPostsButtons();
     }
 
     /**
-     * Toggle select all posts
+     * Create HTML for admin post item
      */
-    toggleSelectAll() {
-        if (this.selectedPosts.size === this.filteredPosts.length) {
-            // Deselect all
-            this.selectedPosts.clear();
-        } else {
-            // Select all
-            this.filteredPosts.forEach(post => this.selectedPosts.add(post.id));
-        }
+    createAdminPostHTML(post) {
+        const createdAt = new Date(post.created_at);
+        const timeAgo = this.getTimeAgo(createdAt);
+        const isSelected = this.selectedPosts.has(post.id);
+        
+        return `
+            <div class="admin-post-item" data-post-id="${post.id}">
+                <input type="checkbox" class="post-checkbox" ${isSelected ? 'checked' : ''} 
+                       onchange="adminApp.togglePostSelection('${post.id}')">
+                <div class="post-details">
+                    <div class="post-meta">
+                        <span class="post-nickname">${this.escapeHtml(post.nickname)}</span>
+                        ${post.rp_name ? `<span class="post-rp-name">(${this.escapeHtml(post.rp_name)})</span>` : ''}
+                        <span class="post-main">${this.getMainDisplayName(post.main)}</span>
+                        <span class="post-timestamp">${timeAgo}</span>
+                    </div>
+                    <div class="post-message">${this.escapeHtml(post.message)}</div>
+                </div>
+                <div class="post-actions">
+                    <button class="post-action-btn delete" onclick="adminApp.confirmDeletePost('${post.id}')" title="Delete post">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Get display name for main
+     */
+    getMainDisplayName(main) {
+        const mainNames = {
+            '1': 'Main 1',
+            '2': 'Main 2',
+            '3': 'Main 3',
+            '4': 'Main 4',
+            'council': 'Council'
+        };
+        return mainNames[main] || main;
+    }
+
+    /**
+     * Handle search input with debounce
+     */
+    handleSearch(value) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => {
+            this.filters.search = value;
+            this.applyPostsFilters();
+            this.renderPosts();
+        }, 300);
+    }
+
+    /**
+     * Handle filter changes
+     */
+    handleFilterChange(filterType, value) {
+        this.filters[filterType] = value;
+        this.applyPostsFilters();
         this.renderPosts();
     }
 
     /**
-     * Update selected posts buttons
+     * Handle date preset selection
      */
-    updateSelectedPostsButtons() {
-        const selectedCount = this.selectedPosts.size;
-        this.elements.deleteSelected.disabled = selectedCount === 0;
-        this.elements.selectAll.textContent = selectedCount === this.filteredPosts.length ? 'Deselect All' : 'Select All';
-    }
-
-    /**
-     * Confirm deletion of selected posts
-     */
-    confirmDeleteSelected() {
-        if (this.selectedPosts.size === 0) return;
+    handleDatePreset(preset) {
+        // Update active button
+        this.elements.datePresetBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.preset === preset);
+        });
         
-        const count = this.selectedPosts.size;
-        this.elements.adminConfirmMessage.textContent = 
-            `Are you sure you want to delete ${count} selected post${count > 1 ? 's' : ''}?`;
-        this.elements.adminConfirmAction.onclick = () => this.deleteSelectedPosts();
-        this.elements.adminConfirmModal.classList.remove('hidden');
-    }
-
-    /**
-     * Confirm deletion of single post
-     */
-    confirmDeletePost(postId) {
-        const post = this.posts.find(p => p.id === postId);
-        if (!post) return;
+        this.dateRange.preset = preset;
         
-        this.elements.adminConfirmMessage.textContent = 
-            `Are you sure you want to delete the post by "${post.nickname}"?`;
-        this.elements.adminConfirmAction.onclick = () => this.deletePost(postId);
-        this.elements.adminConfirmModal.classList.remove('hidden');
+        // Calculate date range based on preset
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        switch (preset) {
+            case 'today':
+                this.dateRange.startDate = today;
+                this.dateRange.endDate = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
+                break;
+            case 'yesterday':
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                this.dateRange.startDate = yesterday;
+                this.dateRange.endDate = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1);
+                break;
+            case 'week':
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay());
+                this.dateRange.startDate = startOfWeek;
+                this.dateRange.endDate = now;
+                break;
+            case 'month':
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                this.dateRange.startDate = startOfMonth;
+                this.dateRange.endDate = now;
+                break;
+            case 'all':
+                this.dateRange.startDate = null;
+                this.dateRange.endDate = null;
+                break;
+        }
+        
+        this.updateChartTitles();
+        this.loadAnalyticsData();
+    }
+    
+    /**
+     * Apply custom date range
+     */
+    applyCustomDateRange() {
+        const startDateValue = this.elements.startDate.value;
+        const endDateValue = this.elements.endDate.value;
+        
+        if (!startDateValue || !endDateValue) {
+            this.showError('Please select both start and end dates');
+            return;
+        }
+        
+        const startDate = new Date(startDateValue);
+        const endDate = new Date(endDateValue + ' 23:59:59');
+        
+        if (startDate > endDate) {
+            this.showError('Start date must be before end date');
+            return;
+        }
+        
+        // Clear preset selection
+        this.elements.datePresetBtns.forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        this.dateRange.preset = 'custom';
+        this.dateRange.startDate = startDate;
+        this.dateRange.endDate = endDate;
+        
+        this.updateChartTitles();
+        this.loadAnalyticsData();
+    }
+    
+    /**
+     * Toggle cumulative mode
+     */
+    toggleCumulativeMode(enabled) {
+        this.dateRange.cumulative = enabled;
+        this.updateChartTitles();
+        chartsManager.updateCharts(this.analyticsData, this.dateRange);
+    }
+    
+    /**
+     * Update chart titles based on current date range
+     */
+    updateChartTitles() {
+        let dateText = '';
+        const cumulativeText = this.dateRange.cumulative ? 'Cumulative ' : '';
+        
+        switch (this.dateRange.preset) {
+            case 'today':
+                dateText = 'Today';
+                break;
+            case 'yesterday':
+                dateText = 'Yesterday';
+                break;
+            case 'week':
+                dateText = 'This Week';
+                break;
+            case 'month':
+                dateText = 'This Month';
+                break;
+            case 'all':
+                dateText = 'All Time';
+                break;
+            case 'custom':
+                const startStr = this.dateRange.startDate.toLocaleDateString();
+                const endStr = this.dateRange.endDate.toLocaleDateString();
+                dateText = `${startStr} - ${endStr}`;
+                break;
+        }
+        
+        this.elements.mainsChartTitle.textContent = `${cumulativeText}Posts by Main (${dateText})`;
+        this.elements.timelineChartTitle.textContent = `${cumulativeText}Posts Timeline (${dateText})`;
+    }
+    
+    /**
+     * Load analytics data for current date range
+     */
+    async loadAnalyticsData() {
+        try {
+            // Get analytics data with date range
+            this.analyticsData = await supabaseClient.getAnalyticsData(this.dateRange);
+            
+            // Update stats
+            this.updateStats();
+            
+            // Update charts
+            chartsManager.updateCharts(this.analyticsData, this.dateRange);
+            
+        } catch (error) {
+            console.error('Error loading analytics data:', error);
+            this.showError('Failed to load analytics data');
+        }
+    }
+    
+    /**
+     * Update statistics display
+     */
+    updateStats() {
+        if (!this.analyticsData) return;
+        
+        this.elements.totalPosts.textContent = this.analyticsData.totalPosts || 0;
+        this.elements.uniqueUsers.textContent = this.analyticsData.uniqueUsers || 0;
+        this.elements.recentPosts.textContent = this.analyticsData.recentPosts || 0;
     }
 
     /**

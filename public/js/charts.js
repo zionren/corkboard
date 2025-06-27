@@ -134,13 +134,50 @@ class ChartsManager {
                     borderColor: 'rgba(108, 92, 231, 1)',
                     borderWidth: 1,
                     borderRadius: 4,
-                    borderSkipped: false
+                    borderSkipped: false,
+                    barThickness: 20,
+                    maxBarThickness: 25,
+                    categoryPercentage: 0.8,
+                    barPercentage: 0.9
                 }]
             },
             options: {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(108, 92, 231, 0.1)',
+                            borderColor: 'rgba(108, 92, 231, 0.2)'
+                        },
+                        ticks: {
+                            color: '#636e72',
+                            font: {
+                                size: 11
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#636e72',
+                            font: {
+                                size: 11
+                            }
+                        },
+                        barThickness: 20,
+                        maxBarThickness: 25
+                    }
+                },
+                elements: {
+                    bar: {
+                        borderRadius: 4
+                    }
+                },
                 plugins: {
                     legend: {
                         display: false

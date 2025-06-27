@@ -657,7 +657,8 @@ class AdminDashboard {
             this.analyticsData = await supabaseClient.getAnalytics();
             this.updateDashboardStats();
             chartsManager.updateCharts(this.analyticsData);
-        } catch (error) {
+        } 
+        catch (error) {
             console.error('Error loading dashboard data:', error);
             this.showError('Failed to load dashboard data');
         }
@@ -952,7 +953,8 @@ class AdminDashboard {
             // Update charts
             chartsManager.updateCharts(this.analyticsData, this.dateRange);
             
-        } catch (error) {
+        } 
+        catch (error) {
             console.error('Error loading analytics data:', error);
             this.showError('Failed to load analytics data');
         }
@@ -981,7 +983,8 @@ class AdminDashboard {
             this.showSuccess(`${postIds.length} post${postIds.length > 1 ? 's' : ''} deleted successfully`);
             this.closeAdminConfirmModal();
             await this.loadPostsData();
-        } catch (error) {
+        } 
+        catch (error) {
             console.error('Error deleting posts:', error);
             this.showError('Failed to delete posts. Please try again.');
         }

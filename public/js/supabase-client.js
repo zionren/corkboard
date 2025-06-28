@@ -59,44 +59,65 @@ class SupabaseClient {
      * Set up real-time subscriptions for pins table
      */
     setupRealtimeSubscriptions() {
-        if (!this.client) return;
+        try {
+            if (!this.client) {
+                console.warn('Cannot setup realtime subscriptions: client not initialized');
+                return;
+            }
 
-        // Subscribe to pins table changes
-        this.client
-            .channel('pins-channel')
-            .on('postgres_changes', 
-                { 
-                    event: '*', 
-                    schema: 'public', 
-                    table: 'pins' 
-                }, 
-                (payload) => {
-                    this.handleRealtimeUpdate(payload);
-                }
-            )
-            .subscribe();
+            // Subscribe to pins table changes with error handling
+            const channel = this.client
+                .channel('pins-channel')
+                .on('postgres_changes', 
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'pins' 
+                    }, 
+                    (payload) => {
+                        this.handleRealtimeUpdate(payload);
+                    }
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Real-time subscriptions established successfully');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.warn('Real-time subscription failed, but app will continue to work');
+                    } else if (status === 'TIMED_OUT') {
+                        console.warn('Real-time subscription timed out, but app will continue to work');
+                    }
+                });
 
-        console.log('Real-time subscriptions established');
+        } catch (error) {
+            console.warn('Failed to setup real-time subscriptions:', error);
+            console.log('App will continue to work without real-time updates');
+            // Don't throw error - realtime is not critical for basic functionality
+        }
     }
 
     /**
      * Handle real-time updates from Supabase
      */
     handleRealtimeUpdate(payload) {
-        const { eventType, new: newRecord, old: oldRecord } = payload;
-        
-        // Dispatch custom events for different update types
-        const event = new CustomEvent('supabase-update', {
-            detail: {
-                type: eventType,
-                new: newRecord,
-                old: oldRecord
-            }
-        });
-        
-        document.dispatchEvent(event);
-        
-        console.log('Real-time update received:', eventType, payload);
+        try {
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+            
+            // Dispatch custom events for different update types
+            const event = new CustomEvent('supabase-update', {
+                detail: {
+                    type: eventType,
+                    new: newRecord,
+                    old: oldRecord
+                }
+            });
+            
+            document.dispatchEvent(event);
+            
+            console.log('Real-time update received:', eventType, payload);
+        } catch (error) {
+            console.error('Error handling real-time update:', error);
+            // Continue execution - don't break real-time functionality
+        }
     }
 
     /**

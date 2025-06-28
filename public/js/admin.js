@@ -52,13 +52,6 @@ class AdminDashboard {
         } catch (error) {
             console.error('Failed to initialize admin dashboard:', error);
             this.showError('Failed to initialize dashboard. Please refresh the page.');
-        } finally {
-            // Ensure UI is in a consistent state
-            try {
-                this.showLoginScreen();
-            } catch (uiError) {
-                console.error('Error showing login screen in finally block:', uiError);
-            }
         }
     }
 
@@ -184,23 +177,19 @@ class AdminDashboard {
     async handleLogin(e) {
         e.preventDefault();
         
-        let submitBtn = null;
+        const username = this.elements.usernameInput.value.trim();
+        const password = this.elements.passwordInput.value;
+        
+        if (!username || !password) {
+            this.showError('Please enter both username and password');
+            return;
+        }
         
         try {
-            const username = this.elements.usernameInput.value.trim();
-            const password = this.elements.passwordInput.value;
-            
-            if (!username || !password) {
-                this.showError('Please enter both username and password');
-                return;
-            }
-            
             // Disable form
-            submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
-            }
+            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
             
             // Authenticate with server
             const response = await fetch('/api/admin/login', {
@@ -210,10 +199,6 @@ class AdminDashboard {
                 },
                 body: JSON.stringify({ username, password })
             });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
             
             const result = await response.json();
             
@@ -229,10 +214,9 @@ class AdminDashboard {
             this.showError('Login failed. Please try again.');
         } finally {
             // Re-enable form
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
-            }
+            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
         }
     }
 
@@ -240,31 +224,17 @@ class AdminDashboard {
      * Show admin dashboard
      */
     async showDashboard() {
-        try {
-            this.elements.loginScreen.classList.add('hidden');
-            this.elements.adminDashboard.classList.remove('hidden');
-            
-            // Initialize charts
-            await chartsManager.initializeCharts();
-            
-            // Load initial data
-            await this.loadDashboardData();
-            
-            // Switch to dashboard tab
-            this.switchTab('dashboard');
-        } catch (error) {
-            console.error('Error showing dashboard:', error);
-            this.showError('Failed to load dashboard. Please refresh the page.');
-            
-            // Fallback: show login screen again
-            try {
-                this.elements.adminDashboard.classList.add('hidden');
-                this.elements.loginScreen.classList.remove('hidden');
-                this.isAuthenticated = false;
-            } catch (fallbackError) {
-                console.error('Error in dashboard fallback:', fallbackError);
-            }
-        }
+        this.elements.loginScreen.classList.add('hidden');
+        this.elements.adminDashboard.classList.remove('hidden');
+        
+        // Initialize charts
+        await chartsManager.initializeCharts();
+        
+        // Load initial data
+        await this.loadDashboardData();
+        
+        // Switch to dashboard tab
+        this.switchTab('dashboard');
     }
 
     /**
@@ -413,6 +383,56 @@ class AdminDashboard {
             .join('');
         
         this.updateSelectedPostsButtons();
+    }
+
+    /**
+     * Update selected posts buttons state
+     */
+    updateSelectedPostsButtons() {
+        const selectedCount = this.selectedPosts.size;
+        const totalCount = this.filteredPosts.length;
+        
+        // Update select all checkbox
+        if (this.elements.selectAll) {
+            this.elements.selectAll.checked = selectedCount > 0 && selectedCount === totalCount;
+            this.elements.selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+        }
+        
+        // Update delete selected button
+        if (this.elements.deleteSelected) {
+            this.elements.deleteSelected.disabled = selectedCount === 0;
+            this.elements.deleteSelected.textContent = selectedCount > 0 
+                ? `Delete Selected (${selectedCount})` 
+                : 'Delete Selected';
+        }
+    }
+
+    /**
+     * Toggle post selection
+     */
+    togglePostSelection(postId) {
+        if (this.selectedPosts.has(postId)) {
+            this.selectedPosts.delete(postId);
+        } else {
+            this.selectedPosts.add(postId);
+        }
+        this.updateSelectedPostsButtons();
+    }
+
+    /**
+     * Toggle all posts selection
+     */
+    toggleAllPosts() {
+        if (this.selectedPosts.size === this.filteredPosts.length) {
+            // Deselect all
+            this.selectedPosts.clear();
+        } else {
+            // Select all
+            this.filteredPosts.forEach(post => {
+                this.selectedPosts.add(post.id);
+            });
+        }
+        this.renderPosts();
     }
 
     /**
@@ -617,374 +637,6 @@ class AdminDashboard {
             chartsManager.updateCharts(this.analyticsData, this.dateRange);
             
         } catch (error) {
-            console.error('Error loading analytics data:', error);
-            this.showError('Failed to load analytics data');
-        }
-    }
-    
-    /**
-     * Update statistics display
-     */
-    updateStats() {
-        if (!this.analyticsData) return;
-        
-        this.elements.totalPosts.textContent = this.analyticsData.totalPosts || 0;
-        this.elements.uniqueUsers.textContent = this.analyticsData.uniqueUsers || 0;
-        this.elements.recentPosts.textContent = this.analyticsData.recentPosts || 0;
-    }
-
-    /**
-     * Logout admin
-     */
-    logout() {
-        this.isAuthenticated = false;
-        this.currentTab = 'dashboard';
-        this.posts = [];
-        this.filteredPosts = [];
-        this.selectedPosts.clear();
-        this.analyticsData = null;
-        
-        // Reset forms
-        this.elements.loginForm.reset();
-        
-        // Destroy charts
-        chartsManager.destroyCharts();
-        
-        // Show login screen
-        this.showLoginScreen();
-        
-        this.showSuccess('Logged out successfully');
-    }
-
-    /**
-     * Switch between dashboard tabs
-     */
-    switchTab(tabName) {
-        // Update navigation
-        this.elements.navButtons.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tab === tabName);
-        });
-        
-        // Update tab content
-        this.elements.dashboardTab.classList.toggle('active', tabName === 'dashboard');
-        this.elements.postsTab.classList.toggle('active', tabName === 'posts');
-        
-        this.currentTab = tabName;
-        
-        // Load tab-specific data
-        if (tabName === 'posts') {
-            this.loadPostsData();
-        } else if (tabName === 'dashboard') {
-            this.loadDashboardData();
-        }
-    }
-
-    /**
-     * Load dashboard analytics data
-     */
-    async loadDashboardData() {
-        try {
-            this.analyticsData = await supabaseClient.getAnalytics();
-            this.updateDashboardStats();
-            chartsManager.updateCharts(this.analyticsData);
-        } 
-        catch (error) {
-            console.error('Error loading dashboard data:', error);
-            this.showError('Failed to load dashboard data');
-        }
-    }
-
-    /**
-     * Update dashboard statistics
-     */
-    updateDashboardStats() {
-        if (!this.analyticsData) return;
-        
-        this.elements.totalPosts.textContent = this.analyticsData.totalPosts;
-        this.elements.uniqueUsers.textContent = this.analyticsData.uniqueUsers;
-        this.elements.recentPosts.textContent = this.analyticsData.recentPosts;
-    }
-
-    /**
-     * Load posts management data
-     */
-    async loadPostsData() {
-        try {
-            this.showAdminLoading();
-            this.posts = await supabaseClient.getAllPinsForAdmin(this.filters);
-            this.applyPostsFilters();
-            this.renderPosts();
-        } catch (error) {
-            console.error('Error loading posts data:', error);
-            this.showError('Failed to load posts data');
-        } finally {
-            this.hideAdminLoading();
-        }
-    }
-
-    /**
-     * Apply filters to posts
-     */
-    applyPostsFilters() {
-        this.filteredPosts = this.posts.filter(post => {
-            // Search filter
-            if (this.filters.search) {
-                const searchLower = this.filters.search.toLowerCase();
-                const matchesSearch = 
-                    post.nickname.toLowerCase().includes(searchLower) ||
-                    post.message.toLowerCase().includes(searchLower) ||
-                    (post.rp_name && post.rp_name.toLowerCase().includes(searchLower));
-                if (!matchesSearch) return false;
-            }
-            
-            // Main filter
-            if (this.filters.main && post.main !== this.filters.main) {
-                return false;
-            }
-            
-            return true;
-        });
-        
-        // Apply sorting
-        this.filteredPosts.sort((a, b) => {
-            switch (this.filters.sort) {
-                case 'newest':
-                    return new Date(b.created_at) - new Date(a.created_at);
-                case 'oldest':
-                    return new Date(a.created_at) - new Date(b.created_at);
-                case 'a-z':
-                    return a.nickname.localeCompare(b.nickname);
-                case 'z-a':
-                    return b.nickname.localeCompare(a.nickname);
-                default:
-                    return new Date(b.created_at) - new Date(a.created_at);
-            }
-        });
-    }
-
-    /**
-     * Render posts in admin interface
-     */
-    renderPosts() {
-        if (this.filteredPosts.length === 0) {
-            this.elements.adminPostsContainer.classList.add('hidden');
-            this.elements.adminEmptyState.classList.remove('hidden');
-            return;
-        }
-        
-        this.elements.adminEmptyState.classList.add('hidden');
-        this.elements.adminPostsContainer.classList.remove('hidden');
-        
-        this.elements.adminPostsContainer.innerHTML = this.filteredPosts
-            .map(post => this.createAdminPostHTML(post))
-            .join('');
-        
-        this.updateSelectedPostsButtons();
-    }
-
-    /**
-     * Create HTML for admin post item
-     */
-    createAdminPostHTML(post) {
-        const createdAt = new Date(post.created_at);
-        const timeAgo = this.getTimeAgo(createdAt);
-        const isSelected = this.selectedPosts.has(post.id);
-        
-        return `
-            <div class="admin-post-item" data-post-id="${post.id}">
-                <input type="checkbox" class="post-checkbox" ${isSelected ? 'checked' : ''} 
-                       onchange="adminApp.togglePostSelection('${post.id}')">
-                <div class="post-details">
-                    <div class="post-meta">
-                        <span class="post-nickname">${this.escapeHtml(post.nickname)}</span>
-                        ${post.rp_name ? `<span class="post-rp-name">(${this.escapeHtml(post.rp_name)})</span>` : ''}
-                        <span class="post-main">${this.getMainDisplayName(post.main)}</span>
-                        <span class="post-timestamp">${timeAgo}</span>
-                    </div>
-                    <div class="post-message">${this.escapeHtml(post.message)}</div>
-                </div>
-                <div class="post-actions">
-                    <button class="post-action-btn delete" onclick="adminApp.confirmDeletePost('${post.id}')" title="Delete post">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Get display name for main
-     */
-    getMainDisplayName(main) {
-        const mainNames = {
-            '1': 'Main 1',
-            '2': 'Main 2',
-            '3': 'Main 3',
-            '4': 'Main 4',
-            'council': 'Council'
-        };
-        return mainNames[main] || main;
-    }
-
-    /**
-     * Handle search input with debounce
-     */
-    handleSearch(value) {
-        clearTimeout(this.searchTimeout);
-        this.searchTimeout = setTimeout(() => {
-            this.filters.search = value;
-            this.applyPostsFilters();
-            this.renderPosts();
-        }, 300);
-    }
-
-    /**
-     * Handle filter changes
-     */
-    handleFilterChange(filterType, value) {
-        this.filters[filterType] = value;
-        this.applyPostsFilters();
-        this.renderPosts();
-    }
-
-    /**
-     * Handle date preset selection
-     */
-    handleDatePreset(preset) {
-        // Update active button
-        this.elements.datePresetBtns.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.preset === preset);
-        });
-        
-        this.dateRange.preset = preset;
-        
-        // Calculate date range based on preset
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        
-        switch (preset) {
-            case 'today':
-                this.dateRange.startDate = today;
-                this.dateRange.endDate = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
-                break;
-            case 'yesterday':
-                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-                this.dateRange.startDate = yesterday;
-                this.dateRange.endDate = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1);
-                break;
-            case 'week':
-                const startOfWeek = new Date(today);
-                startOfWeek.setDate(today.getDate() - today.getDay());
-                this.dateRange.startDate = startOfWeek;
-                this.dateRange.endDate = now;
-                break;
-            case 'month':
-                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                this.dateRange.startDate = startOfMonth;
-                this.dateRange.endDate = now;
-                break;
-            case 'all':
-                this.dateRange.startDate = null;
-                this.dateRange.endDate = null;
-                break;
-        }
-        
-        this.updateChartTitles();
-        this.loadAnalyticsData();
-    }
-    
-    /**
-     * Apply custom date range
-     */
-    applyCustomDateRange() {
-        const startDateValue = this.elements.startDate.value;
-        const endDateValue = this.elements.endDate.value;
-        
-        if (!startDateValue || !endDateValue) {
-            this.showError('Please select both start and end dates');
-            return;
-        }
-        
-        const startDate = new Date(startDateValue);
-        const endDate = new Date(endDateValue + ' 23:59:59');
-        
-        if (startDate > endDate) {
-            this.showError('Start date must be before end date');
-            return;
-        }
-        
-        // Clear preset selection
-        this.elements.datePresetBtns.forEach(btn => {
-            btn.classList.remove('active');
-        });
-        
-        this.dateRange.preset = 'custom';
-        this.dateRange.startDate = startDate;
-        this.dateRange.endDate = endDate;
-        
-        this.updateChartTitles();
-        this.loadAnalyticsData();
-    }
-    
-    /**
-     * Toggle cumulative mode
-     */
-    toggleCumulativeMode(enabled) {
-        this.dateRange.cumulative = enabled;
-        this.updateChartTitles();
-        chartsManager.updateCharts(this.analyticsData, this.dateRange);
-    }
-    
-    /**
-     * Update chart titles based on current date range
-     */
-    updateChartTitles() {
-        let dateText = '';
-        const cumulativeText = this.dateRange.cumulative ? 'Cumulative ' : '';
-        
-        switch (this.dateRange.preset) {
-            case 'today':
-                dateText = 'Today';
-                break;
-            case 'yesterday':
-                dateText = 'Yesterday';
-                break;
-            case 'week':
-                dateText = 'This Week';
-                break;
-            case 'month':
-                dateText = 'This Month';
-                break;
-            case 'all':
-                dateText = 'All Time';
-                break;
-            case 'custom':
-                const startStr = this.dateRange.startDate.toLocaleDateString();
-                const endStr = this.dateRange.endDate.toLocaleDateString();
-                dateText = `${startStr} - ${endStr}`;
-                break;
-        }
-        
-        this.elements.mainsChartTitle.textContent = `${cumulativeText}Posts by Main (${dateText})`;
-        this.elements.timelineChartTitle.textContent = `${cumulativeText}Posts Timeline (${dateText})`;
-    }
-    
-    /**
-     * Load analytics data for current date range
-     */
-    async loadAnalyticsData() {
-        try {
-            // Get analytics data with date range
-            this.analyticsData = await supabaseClient.getAnalyticsData(this.dateRange);
-            
-            // Update stats
-            this.updateStats();
-            
-            // Update charts
-            chartsManager.updateCharts(this.analyticsData, this.dateRange);
-            
-        } 
-        catch (error) {
             console.error('Error loading analytics data:', error);
             this.showError('Failed to load analytics data');
         }
@@ -1017,6 +669,22 @@ class AdminDashboard {
         catch (error) {
             console.error('Error deleting posts:', error);
             this.showError('Failed to delete posts. Please try again.');
+        }
+    }
+
+    /**
+     * Confirm single post deletion
+     */
+    confirmDeletePost(postId) {
+        const post = this.posts.find(p => p.id === postId);
+        if (!post) {
+            this.showError('Post not found');
+            return;
+        }
+        
+        // Show confirmation modal (you'll need to implement this modal)
+        if (confirm(`Are you sure you want to delete the post by "${post.nickname}"?`)) {
+            this.deletePost(postId);
         }
     }
 
@@ -1204,6 +872,56 @@ class AdminDashboard {
      */
     hideAdminLoading() {
         this.elements.adminLoading.classList.add('hidden');
+    }
+
+    /**
+     * Update selected posts buttons state
+     */
+    updateSelectedPostsButtons() {
+        const selectedCount = this.selectedPosts.size;
+        const totalCount = this.filteredPosts.length;
+        
+        // Update select all checkbox
+        if (this.elements.selectAll) {
+            this.elements.selectAll.checked = selectedCount > 0 && selectedCount === totalCount;
+            this.elements.selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+        }
+        
+        // Update delete selected button
+        if (this.elements.deleteSelected) {
+            this.elements.deleteSelected.disabled = selectedCount === 0;
+            this.elements.deleteSelected.textContent = selectedCount > 0 
+                ? `Delete Selected (${selectedCount})` 
+                : 'Delete Selected';
+        }
+    }
+
+    /**
+     * Toggle post selection
+     */
+    togglePostSelection(postId) {
+        if (this.selectedPosts.has(postId)) {
+            this.selectedPosts.delete(postId);
+        } else {
+            this.selectedPosts.add(postId);
+        }
+        this.updateSelectedPostsButtons();
+    }
+
+    /**
+     * Toggle all posts selection
+     */
+    toggleAllPosts() {
+        if (this.selectedPosts.size === this.filteredPosts.length) {
+            // Deselect all
+            this.selectedPosts.clear();
+        } else {
+            // Select all
+            this.filteredPosts.forEach(post => {
+                this.selectedPosts.add(post.id);
+            });
+        }
+        this.renderPosts();
     }
 
     /**

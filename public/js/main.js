@@ -49,12 +49,14 @@ class CorkboardApp {
      * Initialize the application
      */
     async initialize() {
+        let loadingShown = false;
         try {
             // Cache DOM elements first
             this.cacheElements();
             
             // Show loading state
             this.showLoading();
+            loadingShown = true;
             
             // Initialize Supabase client
             await supabaseClient.initialize();
@@ -72,6 +74,11 @@ class CorkboardApp {
         } catch (error) {
             console.error('Failed to initialize app:', error);
             this.showError('Failed to initialize application. Please refresh the page.');
+        } finally {
+            // Always hide loading state regardless of success/failure
+            if (loadingShown) {
+                this.hideLoading();
+            }
         }
     }
 
@@ -227,8 +234,12 @@ class CorkboardApp {
         } catch (error) {
             console.error('Error loading pins:', error);
             this.showError('Failed to load pins. Please try refreshing the page.');
+            // Set empty array as fallback
+            this.pins = [];
+            this.filteredPins = [];
         } finally {
-            this.hideLoading();
+            // Ensure UI is updated even if loading fails
+            this.renderPins();
         }
     }
 
@@ -236,110 +247,154 @@ class CorkboardApp {
      * Apply current filters to pins
      */
     applyFilters() {
-        this.filteredPins = this.pins.filter(pin => {
-            // Search filter
-            if (this.filters.search) {
-                const searchLower = this.filters.search.toLowerCase();
-                const matchesSearch = 
-                    pin.nickname.toLowerCase().includes(searchLower) ||
-                    pin.message.toLowerCase().includes(searchLower);
-                if (!matchesSearch) return false;
-            }
+        try {
+            this.filteredPins = this.pins.filter(pin => {
+                // Search filter
+                if (this.filters.search) {
+                    const searchLower = this.filters.search.toLowerCase();
+                    const matchesSearch = 
+                        pin.nickname.toLowerCase().includes(searchLower) ||
+                        pin.message.toLowerCase().includes(searchLower);
+                    if (!matchesSearch) return false;
+                }
+                
+                // Main filter
+                if (this.filters.main && pin.main !== this.filters.main) {
+                    return false;
+                }
+                
+                return true;
+            });
             
-            // Main filter
-            if (this.filters.main && pin.main !== this.filters.main) {
-                return false;
-            }
-            
-            return true;
-        });
-        
-        // Apply sorting
-        this.filteredPins.sort((a, b) => {
-            switch (this.filters.sort) {
-                case 'newest':
-                    return new Date(b.created_at) - new Date(a.created_at);
-                case 'oldest':
-                    return new Date(a.created_at) - new Date(b.created_at);
-                case 'a-z':
-                    return a.nickname.localeCompare(b.nickname);
-                case 'z-a':
-                    return b.nickname.localeCompare(a.nickname);
-                default:
-                    return new Date(b.created_at) - new Date(a.created_at);
-            }
-        });
+            // Apply sorting
+            this.filteredPins.sort((a, b) => {
+                switch (this.filters.sort) {
+                    case 'newest':
+                        return new Date(b.created_at) - new Date(a.created_at);
+                    case 'oldest':
+                        return new Date(a.created_at) - new Date(b.created_at);
+                    case 'a-z':
+                        return a.nickname.localeCompare(b.nickname);
+                    case 'z-a':
+                        return b.nickname.localeCompare(a.nickname);
+                    default:
+                        return new Date(b.created_at) - new Date(a.created_at);
+                }
+            });
+        } catch (error) {
+            console.error('Error applying filters:', error);
+            // Fallback to showing all pins if filtering fails
+            this.filteredPins = [...this.pins];
+        }
     }
 
     /**
      * Render pins in the grid
      */
     renderPins() {
-        if (this.filteredPins.length === 0) {
-            this.elements.pinsGrid.classList.add('hidden');
-            this.elements.emptyState.classList.remove('hidden');
-            return;
+        try {
+            if (this.filteredPins.length === 0) {
+                this.elements.pinsGrid.classList.add('hidden');
+                this.elements.emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            this.elements.emptyState.classList.add('hidden');
+            this.elements.pinsGrid.classList.remove('hidden');
+            
+            this.elements.pinsGrid.innerHTML = this.filteredPins.map(pin => this.createPinHTML(pin)).join('');
+            
+            // Add fade-in animation
+            this.elements.pinsGrid.classList.add('fade-in');
+            setTimeout(() => {
+                if (this.elements.pinsGrid) {
+                    this.elements.pinsGrid.classList.remove('fade-in');
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Error rendering pins:', error);
+            this.showError('Failed to display pins. Please refresh the page.');
+            
+            // Show empty state as fallback
+            try {
+                if (this.elements.pinsGrid) {
+                    this.elements.pinsGrid.classList.add('hidden');
+                }
+                if (this.elements.emptyState) {
+                    this.elements.emptyState.classList.remove('hidden');
+                }
+            } catch (fallbackError) {
+                console.error('Error showing empty state fallback:', fallbackError);
+            }
         }
-        
-        this.elements.emptyState.classList.add('hidden');
-        this.elements.pinsGrid.classList.remove('hidden');
-        
-        this.elements.pinsGrid.innerHTML = this.filteredPins.map(pin => this.createPinHTML(pin)).join('');
-        
-        // Add fade-in animation
-        this.elements.pinsGrid.classList.add('fade-in');
-        setTimeout(() => {
-            this.elements.pinsGrid.classList.remove('fade-in');
-        }, 500);
     }
 
     /**
      * Create HTML for a single pin
      */
     createPinHTML(pin) {
-        const isOwner = pin.author_id === this.currentUser;
-        const createdAt = new Date(pin.created_at);
-        const timeAgo = this.getTimeAgo(createdAt);
-        
-        return `
-            <div class="pin-card" data-pin-id="${pin.id}">
-                <div class="pin-header">
-                    <div class="pin-nickname">${this.escapeHtml(pin.nickname)}</div>
-                    <div class="pin-timestamp">${timeAgo}</div>
-                </div>
-                <div class="pin-message">${this.escapeHtml(pin.message)}</div>
-                ${isOwner ? `
-                    <div class="pin-actions">
-                        <button class="pin-action-btn edit" onclick="app.editPin('${pin.id}')" title="Edit pin">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="pin-action-btn delete" onclick="app.confirmDeletePin('${pin.id}')" title="Delete pin">
-                            <i class="fas fa-trash"></i>
-                        </button>
+        try {
+            const isOwner = pin.author_id === this.currentUser;
+            const createdAt = new Date(pin.created_at);
+            const timeAgo = this.getTimeAgo(createdAt);
+            
+            return `
+                <div class="pin-card" data-pin-id="${pin.id}">
+                    <div class="pin-header">
+                        <div class="pin-nickname">${this.escapeHtml(pin.nickname)}</div>
+                        <div class="pin-timestamp">${timeAgo}</div>
                     </div>
-                ` : ''}
-            </div>
-        `;
+                    <div class="pin-message">${this.escapeHtml(pin.message)}</div>
+                    ${isOwner ? `
+                        <div class="pin-actions">
+                            <button class="pin-action-btn edit" onclick="app.editPin('${pin.id}')" title="Edit pin">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="pin-action-btn delete" onclick="app.confirmDeletePin('${pin.id}')" title="Delete pin">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error creating pin HTML:', error);
+            // Return a safe fallback HTML structure
+            return `
+                <div class="pin-card error-card">
+                    <div class="pin-header">
+                        <div class="pin-nickname">Error loading pin</div>
+                        <div class="pin-timestamp">—</div>
+                    </div>
+                    <div class="pin-message">This pin could not be displayed properly.</div>
+                </div>
+            `;
+        }
     }
 
     /**
      * Get relative time string
      */
     getTimeAgo(date) {
-        const now = new Date();
-        const diffInSeconds = Math.floor((now - date) / 1000);
-        
-        if (diffInSeconds < 60) {
-            return 'Just now';
-        } else if (diffInSeconds < 3600) {
-            const minutes = Math.floor(diffInSeconds / 60);
-            return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-        } else if (diffInSeconds < 86400) {
-            const hours = Math.floor(diffInSeconds / 3600);
-            return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-        } else {
-            const days = Math.floor(diffInSeconds / 86400);
-            return `${days} day${days > 1 ? 's' : ''} ago`;
+        try {
+            const now = new Date();
+            const diffInSeconds = Math.floor((now - date) / 1000);
+            
+            if (diffInSeconds < 60) {
+                return 'Just now';
+            } else if (diffInSeconds < 3600) {
+                const minutes = Math.floor(diffInSeconds / 60);
+                return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            } else if (diffInSeconds < 86400) {
+                const hours = Math.floor(diffInSeconds / 3600);
+                return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            } else {
+                const days = Math.floor(diffInSeconds / 86400);
+                return `${days} day${days > 1 ? 's' : ''} ago`;
+            }
+        } catch (error) {
+            console.error('Error calculating time ago:', error);
+            return 'Unknown time';
         }
     }
 
@@ -347,9 +402,20 @@ class CorkboardApp {
      * Escape HTML to prevent XSS
      */
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        try {
+            if (typeof text !== 'string') {
+                console.warn('escapeHtml received non-string input:', text);
+                return String(text || '');
+            }
+            
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        } catch (error) {
+            console.error('Error escaping HTML:', error);
+            // Return empty string as safe fallback
+            return '';
+        }
     }
 
     /**
@@ -466,6 +532,13 @@ class CorkboardApp {
         } catch (error) {
             console.error('Error deleting pin:', error);
             this.showError('Failed to delete pin. Please try again.');
+        } finally {
+            // Always close the confirmation modal regardless of outcome
+            try {
+                this.closeConfirmModal();
+            } catch (modalError) {
+                console.error('Error closing confirmation modal:', modalError);
+            }
         }
     }
 
@@ -475,35 +548,39 @@ class CorkboardApp {
     async handlePinSubmit(e) {
         e.preventDefault();
         
-        const formData = {
-            rpName: this.elements.rpNameInput.value.trim(),
-            nickname: this.elements.nicknameInput.value.trim(),
-            main: this.elements.mainInput.value,
-            message: this.elements.messageInput.value.trim(),
-            authorId: this.currentUser
-        };
-        
-        // Validation
-        if (!formData.rpName || !formData.nickname || !formData.main || !formData.message) {
-            this.showError('Please fill in all required fields');
-            return;
-        }
-        
-        if (formData.nickname.length > 30) {
-            this.showError('Nickname must be 30 characters or less');
-            return;
-        }
-        
-        if (formData.rpName.length > 30) {
-            this.showError('RP name must be 30 characters or less');
-            return;
-        }
+        let submitBtn = null;
         
         try {
+            const formData = {
+                rpName: this.elements.rpNameInput.value.trim(),
+                nickname: this.elements.nicknameInput.value.trim(),
+                main: this.elements.mainInput.value,
+                message: this.elements.messageInput.value.trim(),
+                authorId: this.currentUser
+            };
+            
+            // Validation
+            if (!formData.rpName || !formData.nickname || !formData.main || !formData.message) {
+                this.showError('Please fill in all required fields');
+                return;
+            }
+            
+            if (formData.nickname.length > 30) {
+                this.showError('Nickname must be 30 characters or less');
+                return;
+            }
+            
+            if (formData.rpName.length > 30) {
+                this.showError('RP name must be 30 characters or less');
+                return;
+            }
+            
             // Disable submit button
-            const submitBtn = this.elements.pinForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            submitBtn = this.elements.pinForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
             
             if (this.editingPin) {
                 // Update existing pin
@@ -521,9 +598,10 @@ class CorkboardApp {
             this.showError('Failed to save pin. Please try again.');
         } finally {
             // Re-enable submit button
-            const submitBtn = this.elements.pinForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = `<i class="fas fa-save"></i> ${this.editingPin ? 'Update Pin' : 'Save Pin'}`;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i class="fas fa-save"></i> ${this.editingPin ? 'Update Pin' : 'Save Pin'}`;
+            }
         }
     }
 

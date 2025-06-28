@@ -52,6 +52,13 @@ class AdminDashboard {
         } catch (error) {
             console.error('Failed to initialize admin dashboard:', error);
             this.showError('Failed to initialize dashboard. Please refresh the page.');
+        } finally {
+            // Ensure UI is in a consistent state
+            try {
+                this.showLoginScreen();
+            } catch (uiError) {
+                console.error('Error showing login screen in finally block:', uiError);
+            }
         }
     }
 
@@ -177,19 +184,23 @@ class AdminDashboard {
     async handleLogin(e) {
         e.preventDefault();
         
-        const username = this.elements.usernameInput.value.trim();
-        const password = this.elements.passwordInput.value;
-        
-        if (!username || !password) {
-            this.showError('Please enter both username and password');
-            return;
-        }
+        let submitBtn = null;
         
         try {
+            const username = this.elements.usernameInput.value.trim();
+            const password = this.elements.passwordInput.value;
+            
+            if (!username || !password) {
+                this.showError('Please enter both username and password');
+                return;
+            }
+            
             // Disable form
-            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            }
             
             // Authenticate with server
             const response = await fetch('/api/admin/login', {
@@ -199,6 +210,10 @@ class AdminDashboard {
                 },
                 body: JSON.stringify({ username, password })
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             
             const result = await response.json();
             
@@ -214,9 +229,10 @@ class AdminDashboard {
             this.showError('Login failed. Please try again.');
         } finally {
             // Re-enable form
-            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+            }
         }
     }
 
@@ -224,17 +240,31 @@ class AdminDashboard {
      * Show admin dashboard
      */
     async showDashboard() {
-        this.elements.loginScreen.classList.add('hidden');
-        this.elements.adminDashboard.classList.remove('hidden');
-        
-        // Initialize charts
-        await chartsManager.initializeCharts();
-        
-        // Load initial data
-        await this.loadDashboardData();
-        
-        // Switch to dashboard tab
-        this.switchTab('dashboard');
+        try {
+            this.elements.loginScreen.classList.add('hidden');
+            this.elements.adminDashboard.classList.remove('hidden');
+            
+            // Initialize charts
+            await chartsManager.initializeCharts();
+            
+            // Load initial data
+            await this.loadDashboardData();
+            
+            // Switch to dashboard tab
+            this.switchTab('dashboard');
+        } catch (error) {
+            console.error('Error showing dashboard:', error);
+            this.showError('Failed to load dashboard. Please refresh the page.');
+            
+            // Fallback: show login screen again
+            try {
+                this.elements.adminDashboard.classList.add('hidden');
+                this.elements.loginScreen.classList.remove('hidden');
+                this.isAuthenticated = false;
+            } catch (fallbackError) {
+                console.error('Error in dashboard fallback:', fallbackError);
+            }
+        }
     }
 
     /**

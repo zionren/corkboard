@@ -18,20 +18,27 @@ class SupabaseClient {
             // Fetch configuration from server
             const response = await fetch('/api/config');
             if (!response.ok) {
-                throw new Error('Failed to fetch configuration');
+                throw new Error(`Failed to fetch configuration: ${response.status} ${response.statusText}`);
             }
             
             this.config = await response.json();
             
-            // Initialize Supabase client
+            // Validate configuration
             if (!this.config.supabaseUrl || !this.config.supabaseAnonKey) {
                 throw new Error('Missing Supabase configuration');
             }
 
+            // Initialize Supabase client
             this.client = supabase.createClient(
                 this.config.supabaseUrl,
                 this.config.supabaseAnonKey
             );
+
+            // Test the connection
+            const { data, error } = await this.client.from('pins').select('count').limit(1);
+            if (error) {
+                throw new Error(`Supabase connection test failed: ${error.message}`);
+            }
 
             this.initialized = true;
             console.log('Supabase client initialized successfully');
@@ -42,6 +49,8 @@ class SupabaseClient {
             return this.client;
         } catch (error) {
             console.error('Failed to initialize Supabase client:', error);
+            this.initialized = false;
+            this.client = null;
             throw error;
         }
     }
@@ -59,188 +68,250 @@ class SupabaseClient {
      * Set up real-time subscriptions for pins table
      */
     setupRealtimeSubscriptions() {
-        if (!this.client) return;
+        try {
+            if (!this.client) {
+                console.warn('Cannot setup realtime subscriptions: client not initialized');
+                return;
+            }
 
-        // Subscribe to pins table changes
-        this.client
-            .channel('pins-channel')
-            .on('postgres_changes', 
-                { 
-                    event: '*', 
-                    schema: 'public', 
-                    table: 'pins' 
-                }, 
-                (payload) => {
-                    this.handleRealtimeUpdate(payload);
-                }
-            )
-            .subscribe();
+            // Subscribe to pins table changes
+            this.client
+                .channel('pins-channel')
+                .on('postgres_changes', 
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'pins' 
+                    }, 
+                    (payload) => {
+                        this.handleRealtimeUpdate(payload);
+                    }
+                )
+                .subscribe();
 
-        console.log('Real-time subscriptions established');
+            console.log('Real-time subscriptions established');
+        } catch (error) {
+            console.error('Error setting up real-time subscriptions:', error);
+            // Don't throw error as this is not critical for basic functionality
+        }
     }
 
     /**
      * Handle real-time updates from Supabase
      */
     handleRealtimeUpdate(payload) {
-        const { eventType, new: newRecord, old: oldRecord } = payload;
-        
-        // Dispatch custom events for different update types
-        const event = new CustomEvent('supabase-update', {
-            detail: {
-                type: eventType,
-                new: newRecord,
-                old: oldRecord
-            }
-        });
-        
-        document.dispatchEvent(event);
-        
-        console.log('Real-time update received:', eventType, payload);
+        try {
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+            
+            // Dispatch custom events for different update types
+            const event = new CustomEvent('supabase-update', {
+                detail: {
+                    type: eventType,
+                    new: newRecord,
+                    old: oldRecord
+                }
+            });
+            
+            document.dispatchEvent(event);
+            
+            console.log('Real-time update received:', eventType, payload);
+        } catch (error) {
+            console.error('Error handling real-time update:', error);
+            // Continue execution - don't break real-time functionality
+        }
     }
 
     /**
      * Create a new pin
      */
     async createPin(pinData) {
-        this.ensureInitialized();
-        
-        const { data, error } = await this.client
-            .from('pins')
-            .insert([{
-                rp_name: pinData.rpName,
-                nickname: pinData.nickname,
-                main: pinData.main,
-                message: pinData.message,
-                author_id: pinData.authorId,
-                created_at: new Date().toISOString()
-            }])
-            .select();
+        try {
+            this.ensureInitialized();
+            
+            // Validate input data
+            if (!pinData.rpName || !pinData.nickname || !pinData.main || !pinData.message || !pinData.authorId) {
+                throw new Error('Missing required pin data');
+            }
+            
+            const { data, error } = await this.client
+                .from('pins')
+                .insert([{
+                    rp_name: pinData.rpName,
+                    nickname: pinData.nickname,
+                    main: pinData.main,
+                    message: pinData.message,
+                    author_id: pinData.authorId,
+                    created_at: new Date().toISOString()
+                }])
+                .select();
 
-        if (error) {
-            console.error('Error creating pin:', error);
-            throw error;
+            if (error) {
+                console.error('Error creating pin:', error);
+                throw new Error(`Failed to create pin: ${error.message}`);
+            }
+
+            return data[0];
+        } catch (error) {
+            console.error('Error in createPin:', error);
+            if (error.message.includes('not initialized')) {
+                throw error;
+            }
+            throw new Error('Failed to create pin. Please try again.');
         }
-
-        return data[0];
     }
 
     /**
      * Get all pins with optional filtering and sorting
      */
     async getPins(filters = {}) {
-        this.ensureInitialized();
-        
-        let query = this.client
-            .from('pins')
-            .select('*');
+        try {
+            this.ensureInitialized();
+            
+            let query = this.client
+                .from('pins')
+                .select('*');
 
-        // Apply filters
-        if (filters.main) {
-            query = query.eq('main', filters.main);
+            // Apply filters
+            if (filters.main) {
+                query = query.eq('main', filters.main);
+            }
+
+            if (filters.search) {
+                query = query.or(`nickname.ilike.%${filters.search}%,message.ilike.%${filters.search}%`);
+            }
+
+            if (filters.authorId) {
+                query = query.eq('author_id', filters.authorId);
+            }
+
+            // Apply sorting
+            const sortOrder = filters.sort || 'newest';
+            switch (sortOrder) {
+                case 'newest':
+                    query = query.order('created_at', { ascending: false });
+                    break;
+                case 'oldest':
+                    query = query.order('created_at', { ascending: true });
+                    break;
+                case 'a-z':
+                    query = query.order('nickname', { ascending: true });
+                    break;
+                case 'z-a':
+                    query = query.order('nickname', { ascending: false });
+                    break;
+                default:
+                    query = query.order('created_at', { ascending: false });
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                console.error('Error fetching pins:', error);
+                throw new Error(`Failed to fetch pins: ${error.message}`);
+            }
+
+            return data || [];
+        } catch (error) {
+            console.error('Error in getPins:', error);
+            if (error.message.includes('not initialized')) {
+                throw error;
+            }
+            throw new Error('Failed to retrieve pins. Please try again.');
         }
-
-        if (filters.search) {
-            query = query.or(`nickname.ilike.%${filters.search}%,message.ilike.%${filters.search}%`);
-        }
-
-        if (filters.authorId) {
-            query = query.eq('author_id', filters.authorId);
-        }
-
-        // Apply sorting
-        const sortOrder = filters.sort || 'newest';
-        switch (sortOrder) {
-            case 'newest':
-                query = query.order('created_at', { ascending: false });
-                break;
-            case 'oldest':
-                query = query.order('created_at', { ascending: true });
-                break;
-            case 'a-z':
-                query = query.order('nickname', { ascending: true });
-                break;
-            case 'z-a':
-                query = query.order('nickname', { ascending: false });
-                break;
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching pins:', error);
-            throw error;
-        }
-
-        return data || [];
     }
 
     /**
      * Update a pin
      */
     async updatePin(id, pinData, authorId) {
-        this.ensureInitialized();
-        
-        // First verify ownership
-        const { data: existingPin, error: fetchError } = await this.client
-            .from('pins')
-            .select('author_id')
-            .eq('id', id)
-            .single();
+        try {
+            this.ensureInitialized();
+            
+            // Validate input
+            if (!id || !pinData || !authorId) {
+                throw new Error('Missing required parameters for pin update');
+            }
+            
+            // First verify ownership
+            const { data: existingPin, error: fetchError } = await this.client
+                .from('pins')
+                .select('author_id')
+                .eq('id', id)
+                .single();
 
-        if (fetchError) {
-            console.error('Error fetching pin for update:', fetchError);
-            throw fetchError;
+            if (fetchError) {
+                console.error('Error fetching pin for update:', fetchError);
+                throw new Error(`Failed to verify pin ownership: ${fetchError.message}`);
+            }
+
+            if (existingPin.author_id !== authorId) {
+                throw new Error('Unauthorized: You can only edit your own pins');
+            }
+
+            const { data, error } = await this.client
+                .from('pins')
+                .update({
+                    rp_name: pinData.rpName,
+                    nickname: pinData.nickname,
+                    main: pinData.main,
+                    message: pinData.message,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+                .eq('author_id', authorId)
+                .select();
+
+            if (error) {
+                console.error('Error updating pin:', error);
+                throw new Error(`Failed to update pin: ${error.message}`);
+            }
+
+            return data[0];
+        } catch (error) {
+            console.error('Error in updatePin:', error);
+            if (error.message.includes('not initialized') || error.message.includes('Unauthorized')) {
+                throw error;
+            }
+            throw new Error('Failed to update pin. Please try again.');
         }
-
-        if (existingPin.author_id !== authorId) {
-            throw new Error('Unauthorized: You can only edit your own pins');
-        }
-
-        const { data, error } = await this.client
-            .from('pins')
-            .update({
-                rp_name: pinData.rpName,
-                nickname: pinData.nickname,
-                main: pinData.main,
-                message: pinData.message,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .eq('author_id', authorId)
-            .select();
-
-        if (error) {
-            console.error('Error updating pin:', error);
-            throw error;
-        }
-
-        return data[0];
     }
 
     /**
      * Delete a pin
      */
     async deletePin(id, authorId) {
-        this.ensureInitialized();
-        
-        const { data, error } = await this.client
-            .from('pins')
-            .delete()
-            .eq('id', id)
-            .eq('author_id', authorId)
-            .select();
+        try {
+            this.ensureInitialized();
+            
+            // Validate input
+            if (!id || !authorId) {
+                throw new Error('Missing required parameters for pin deletion');
+            }
+            
+            const { data, error } = await this.client
+                .from('pins')
+                .delete()
+                .eq('id', id)
+                .eq('author_id', authorId)
+                .select();
 
-        if (error) {
-            console.error('Error deleting pin:', error);
-            throw error;
+            if (error) {
+                console.error('Error deleting pin:', error);
+                throw new Error(`Failed to delete pin: ${error.message}`);
+            }
+
+            if (!data || data.length === 0) {
+                throw new Error('Pin not found or you do not have permission to delete it');
+            }
+
+            return data[0];
+        } catch (error) {
+            console.error('Error in deletePin:', error);
+            if (error.message.includes('not initialized') || error.message.includes('not found')) {
+                throw error;
+            }
+            throw new Error('Failed to delete pin. Please try again.');
         }
-
-        if (!data || data.length === 0) {
-            throw new Error('Pin not found or unauthorized');
-        }
-
-        return data[0];
     }
 
     /**

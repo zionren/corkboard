@@ -34,8 +34,11 @@ class ChartsManager {
             this.initializeMainsChart();
             this.initializeTimelineChart();
 
+            console.log('Charts initialized successfully');
         } catch (error) {
             console.error('Error initializing charts:', error);
+            // Show user-friendly error message
+            this.showChartError('Failed to initialize charts. Please refresh the page.');
         }
     }
 
@@ -43,71 +46,86 @@ class ChartsManager {
      * Configure Chart.js default settings
      */
     configureChartDefaults() {
-        Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        Chart.defaults.font.size = 12;
-        Chart.defaults.color = '#636e72';
-        Chart.defaults.plugins.legend.display = true;
-        Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(45, 52, 54, 0.9)';
-        Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
-        Chart.defaults.plugins.tooltip.bodyColor = '#ffffff';
-        Chart.defaults.plugins.tooltip.cornerRadius = 8;
-        Chart.defaults.elements.arc.borderWidth = 0;
-        Chart.defaults.elements.bar.borderRadius = 4;
-        Chart.defaults.elements.line.tension = 0.4;
+        try {
+            Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+            Chart.defaults.font.size = 12;
+            Chart.defaults.color = '#636e72';
+            Chart.defaults.plugins.legend.display = true;
+            Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(45, 52, 54, 0.9)';
+            Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+            Chart.defaults.plugins.tooltip.bodyColor = '#ffffff';
+            Chart.defaults.plugins.tooltip.cornerRadius = 8;
+            Chart.defaults.elements.arc.borderWidth = 0;
+            Chart.defaults.elements.bar.borderRadius = 4;
+            Chart.defaults.elements.line.tension = 0.4;
+        } catch (error) {
+            console.error('Error configuring chart defaults:', error);
+            // Continue without custom defaults if this fails
+        }
     }
 
     /**
      * Initialize the mains distribution pie chart
      */
     initializeMainsChart() {
-        const ctx = document.getElementById('mains-chart');
-        if (!ctx) return;
+        try {
+            const ctx = document.getElementById('mains-chart');
+            if (!ctx) {
+                console.warn('Mains chart canvas not found');
+                return;
+            }
 
-        this.charts.mains = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Main 1', 'Main 2', 'Main 3', 'Main 4', 'Council'],
-                datasets: [{
-                    data: [0, 0, 0, 0, 0],
-                    backgroundColor: this.colors.sunset,
-                    hoverBackgroundColor: this.colors.sunset.map(color => this.lightenColor(color, 20)),
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            font: {
-                                size: 12
+            this.charts.mains = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Main 1', 'Main 2', 'Main 3', 'Main 4', 'Council'],
+                    datasets: [{
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: this.colors.sunset,
+                        hoverBackgroundColor: this.colors.sunset.map(color => this.lightenColor(color, 20)),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                    return `${label}: ${value} posts (${percentage}%)`;
+                                }
                             }
                         }
                     },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.parsed || 0;
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-                                return `${label}: ${value} posts (${percentage}%)`;
-                            }
-                        }
+                    cutout: '50%',
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true
                     }
-                },
-                cutout: '50%',
-                animation: {
-                    animateScale: true,
-                    animateRotate: true
                 }
-            }
-        });
+            });
+
+            console.log('Mains chart initialized');
+        } catch (error) {
+            console.error('Error initializing mains chart:', error);
+            this.showChartError('Failed to initialize mains distribution chart');
+        }
     }
 
     /**
@@ -381,6 +399,21 @@ class ChartsManager {
                 chart.update();
             }
         });
+    }
+
+    /**
+     * Show chart error message
+     */
+    showChartError(message) {
+        try {
+            console.error('Chart Error:', message);
+            // Try to show error in admin dashboard if available
+            if (typeof admin !== 'undefined' && admin.showError) {
+                admin.showError(message);
+            }
+        } catch (error) {
+            console.error('Error showing chart error message:', error);
+        }
     }
 }
 

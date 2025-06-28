@@ -15,23 +15,7 @@ Your app is deployed but:
 4. Add these EXACT values:
 
 ```
-SUPABASE_URL
-https://izcaijukyjgfpjzsmhhh.supabase.co
-
-SUPABASE_ANON_KEY
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6Y2FpanVreWpnZnBqenNtaGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA5MzU2ODAsImV4cCI6MjA2NjUxMTY4MH0.1N-eVaBctkQRIHblsdbMEklOUc3EjJZJXjLZRs1NoVk
-
-DATABASE_URL
-postgresql://postgres.izcaijukyjgfpjzsmhhh:Dimate101%!@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
-
-ADMIN_USERNAME
-RenZion
-
-ADMIN_PASSWORD
-Zion102%
-
-NODE_ENV
-production
+top seccret! get out!
 ```
 
 ### 5. Redeploy:

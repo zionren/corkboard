@@ -83,15 +83,6 @@ class AdminDashboard {
             uniqueUsers: document.getElementById('unique-users'),
             recentPosts: document.getElementById('recent-posts'),
             
-            // Date controls
-            datePresetBtns: document.querySelectorAll('.date-preset-btn'),
-            startDate: document.getElementById('start-date'),
-            endDate: document.getElementById('end-date'),
-            applyDateRange: document.getElementById('apply-date-range'),
-            cumulativeMode: document.getElementById('cumulative-mode'),
-            mainsChartTitle: document.getElementById('mains-chart-title'),
-            timelineChartTitle: document.getElementById('timeline-chart-title'),
-            
             // Posts management elements
             adminMainFilter: document.getElementById('admin-main-filter'),
             adminSortFilter: document.getElementById('admin-sort-filter'),
@@ -123,21 +114,13 @@ class AdminDashboard {
         // Login form
         this.elements.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
         
-        // Logout and refresh
+        // Logout
         this.elements.logoutBtn.addEventListener('click', () => this.logout());
-        this.elements.refreshData.addEventListener('click', () => this.refreshData());
         
         // Navigation tabs
         this.elements.navButtons.forEach(btn => {
             btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
         });
-        
-        // Date controls
-        this.elements.datePresetBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => this.handleDatePreset(e.target.dataset.preset));
-        });
-        this.elements.applyDateRange.addEventListener('click', () => this.applyCustomDateRange());
-        this.elements.cumulativeMode.addEventListener('change', (e) => this.toggleCumulativeMode(e.target.checked));
         
         // Posts management filters
         this.elements.adminMainFilter.addEventListener('change', (e) => this.handleFilterChange('main', e.target.value));
@@ -180,38 +163,13 @@ class AdminDashboard {
             return;
         }
 
-        try {
-            // Disable form
-            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
-            
-            // Authenticate with server using environment variables
-            const response = await fetch('/api/admin/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ username, password })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.isAuthenticated = true;
-                this.showDashboard();
-                this.showSuccess('Login successful');
-            } else {
-                this.showError('Invalid username or password');
-            }
-        } catch (error) {
-            console.error('Login error:', error);
-            this.showError('Login failed. Please try again.');
-        } finally {
-            // Re-enable form
-            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+        // Simple authentication - in production use proper backend auth
+        if (username === 'admin' && password === 'admin123') {
+            this.isAuthenticated = true;
+            this.showDashboard();
+            this.showSuccess('Login successful');
+        } else {
+            this.showError('Invalid username or password');
         }
     }
 
@@ -224,14 +182,6 @@ class AdminDashboard {
         
         // Switch to dashboard tab
         this.switchTab('dashboard');
-        
-        // Initialize charts if available
-        if (typeof chartsManager !== 'undefined') {
-            await chartsManager.initializeCharts();
-        }
-        
-        // Load dashboard analytics
-        await this.loadDashboardAnalytics();
         
         // Load posts data
         await this.loadPostsData();
@@ -248,21 +198,8 @@ class AdminDashboard {
         this.selectedPosts.clear();
         this.analyticsData = null;
         
-        // Reset date range
-        this.dateRange = {
-            preset: 'today',
-            startDate: null,
-            endDate: null,
-            cumulative: false
-        };
-        
         // Reset forms
         this.elements.loginForm.reset();
-        
-        // Destroy charts
-        if (typeof chartsManager !== 'undefined') {
-            chartsManager.destroyCharts();
-        }
         
         // Show login screen
         this.showLoginScreen();
@@ -288,8 +225,6 @@ class AdminDashboard {
         // Load tab-specific data
         if (tabName === 'posts') {
             this.loadPostsData();
-        } else if (tabName === 'dashboard') {
-            this.loadDashboardAnalytics();
         }
     }
 
@@ -504,8 +439,10 @@ class AdminDashboard {
             this.elements.deleteSelected.disabled = true;
             this.elements.deleteSelected.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
             
-            // Use bulk delete for multiple posts
-            await supabaseClient.deletePins(postsToDelete);
+            // Delete posts one by one
+            for (const postId of postsToDelete) {
+                await supabaseClient.deletePin(postId, 'admin');
+            }
             
             // Clear selection
             this.selectedPosts.clear();
@@ -548,7 +485,7 @@ class AdminDashboard {
     async deleteSinglePost(postId) {
         try {
             this.closeAdminConfirmModal();
-            await supabaseClient.adminDeletePin(postId);
+            await supabaseClient.deletePin(postId, 'admin');
             await this.loadPostsData();
             this.showSuccess('Post deleted successfully');
         } catch (error) {
@@ -670,264 +607,6 @@ class AdminDashboard {
         if (toast) {
             toast.classList.add('hidden');
         }
-    }
-
-    /**
-     * Refresh dashboard data
-     */
-    async refreshData() {
-        try {
-            await this.loadDashboardAnalytics();
-            await this.loadPostsData();
-            this.showSuccess('Dashboard data refreshed');
-        } catch (error) {
-            console.error('Error refreshing data:', error);
-            this.showError('Failed to refresh dashboard data');
-        }
-    }
-
-    /**
-     * Load dashboard analytics data
-     */
-    async loadDashboardAnalytics() {
-        try {
-            const { startDate, endDate } = this.getDateRangeForPreset(this.dateRange.preset);
-            
-            // Get all posts for analytics
-            const allPosts = await supabaseClient.getPins({});
-            
-            // Filter posts by date range
-            const filteredPosts = this.filterPostsByDateRange(allPosts, startDate, endDate);
-            
-            // Calculate analytics
-            this.analyticsData = this.calculateAnalytics(filteredPosts, startDate, endDate);
-            
-            // Update dashboard stats
-            this.updateDashboardStats();
-            
-            // Update charts if available
-            if (typeof chartsManager !== 'undefined' && chartsManager.areChartsInitialized()) {
-                chartsManager.updateCharts(this.analyticsData, this.dateRange);
-            }
-            
-            // Update chart titles
-            this.updateChartTitles();
-            
-        } catch (error) {
-            console.error('Error loading analytics:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Get date range for preset
-     */
-    getDateRangeForPreset(preset) {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        
-        switch (preset) {
-            case 'today':
-                return {
-                    startDate: today,
-                    endDate: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
-                };
-            case 'yesterday':
-                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-                return {
-                    startDate: yesterday,
-                    endDate: new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1)
-                };
-            case 'this-week':
-                const weekStart = new Date(today);
-                weekStart.setDate(today.getDate() - today.getDay());
-                return {
-                    startDate: weekStart,
-                    endDate: now
-                };
-            case 'this-month':
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                return {
-                    startDate: monthStart,
-                    endDate: now
-                };
-            case 'all-time':
-            default:
-                return {
-                    startDate: new Date('2020-01-01'),
-                    endDate: now
-                };
-        }
-    }
-
-    /**
-     * Filter posts by date range
-     */
-    filterPostsByDateRange(posts, startDate, endDate) {
-        return posts.filter(post => {
-            const postDate = new Date(post.created_at);
-            return postDate >= startDate && postDate <= endDate;
-        });
-    }
-
-    /**
-     * Calculate analytics from filtered posts
-     */
-    calculateAnalytics(posts, startDate, endDate) {
-        const analytics = {
-            totalPosts: posts.length,
-            uniqueUsers: new Set(posts.map(p => p.nickname)).size,
-            recentPosts: posts.slice(-5).reverse(),
-            mainCounts: {
-                '1': 0,
-                '2': 0,
-                '3': 0,
-                '4': 0,
-                'council': 0
-            },
-            hourlyData: Array(24).fill(0),
-            dailyData: {}
-        };
-
-        // Count posts by main
-        posts.forEach(post => {
-            const main = post.main_number?.toString() || 'council';
-            if (analytics.mainCounts.hasOwnProperty(main)) {
-                analytics.mainCounts[main]++;
-            }
-        });
-
-        // Count posts by hour
-        posts.forEach(post => {
-            const hour = new Date(post.created_at).getHours();
-            analytics.hourlyData[hour]++;
-        });
-
-        // Count posts by day for cumulative view
-        posts.forEach(post => {
-            const date = new Date(post.created_at).toISOString().split('T')[0];
-            analytics.dailyData[date] = (analytics.dailyData[date] || 0) + 1;
-        });
-
-        // Convert daily data to cumulative if needed
-        if (this.dateRange.cumulative) {
-            let cumulative = 0;
-            const sortedDates = Object.keys(analytics.dailyData).sort();
-            analytics.hourlyData = sortedDates.map(date => {
-                cumulative += analytics.dailyData[date];
-                return cumulative;
-            });
-        }
-
-        return analytics;
-    }
-
-    /**
-     * Update dashboard stats display
-     */
-    updateDashboardStats() {
-        if (!this.analyticsData) return;
-
-        // Update stat cards
-        if (this.elements.totalPosts) {
-            this.elements.totalPosts.textContent = this.analyticsData.totalPosts.toLocaleString();
-        }
-        
-        if (this.elements.uniqueUsers) {
-            this.elements.uniqueUsers.textContent = this.analyticsData.uniqueUsers.toLocaleString();
-        }
-        
-        if (this.elements.recentPosts) {
-            this.elements.recentPosts.textContent = this.analyticsData.recentPosts.length.toLocaleString();
-        }
-    }
-
-    /**
-     * Update chart titles based on current date range
-     */
-    updateChartTitles() {
-        const presetNames = {
-            'today': 'Today',
-            'yesterday': 'Yesterday',
-            'this-week': 'This Week',
-            'this-month': 'This Month',
-            'all-time': 'All Time'
-        };
-
-        const currentPreset = presetNames[this.dateRange.preset] || 'Custom Range';
-        const modeText = this.dateRange.cumulative ? ' (Cumulative)' : '';
-
-        if (this.elements.mainsChartTitle) {
-            this.elements.mainsChartTitle.textContent = `Posts by Main - ${currentPreset}`;
-        }
-
-        if (this.elements.timelineChartTitle) {
-            const timelineTitle = this.dateRange.cumulative ? 
-                `Posts Timeline - ${currentPreset}${modeText}` : 
-                `Posts by Hour - ${currentPreset}`;
-            this.elements.timelineChartTitle.textContent = timelineTitle;
-        }
-    }
-
-    /**
-     * Handle date preset button clicks
-     */
-    async handleDatePreset(preset) {
-        // Update active button
-        this.elements.datePresetBtns.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.preset === preset);
-        });
-
-        // Update date range
-        this.dateRange.preset = preset;
-        
-        // Clear custom dates when using presets
-        this.elements.startDate.value = '';
-        this.elements.endDate.value = '';
-
-        // Reload analytics
-        await this.loadDashboardAnalytics();
-    }
-
-    /**
-     * Apply custom date range
-     */
-    async applyCustomDateRange() {
-        const startDate = this.elements.startDate.value;
-        const endDate = this.elements.endDate.value;
-
-        if (!startDate || !endDate) {
-            this.showError('Please select both start and end dates');
-            return;
-        }
-
-        if (new Date(startDate) > new Date(endDate)) {
-            this.showError('Start date must be before end date');
-            return;
-        }
-
-        // Clear preset selection
-        this.elements.datePresetBtns.forEach(btn => {
-            btn.classList.remove('active');
-        });
-
-        // Update date range
-        this.dateRange.preset = 'custom';
-        this.dateRange.startDate = new Date(startDate);
-        this.dateRange.endDate = new Date(endDate + 'T23:59:59');
-
-        // Reload analytics
-        await this.loadDashboardAnalytics();
-    }
-
-    /**
-     * Toggle cumulative mode
-     */
-    async toggleCumulativeMode(enabled) {
-        this.dateRange.cumulative = enabled;
-        
-        // Reload analytics to update charts
-        await this.loadDashboardAnalytics();
     }
 }
 

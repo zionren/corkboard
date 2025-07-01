@@ -163,13 +163,38 @@ class AdminDashboard {
             return;
         }
 
-        // Simple authentication - in production use proper backend auth
-        if (username === 'admin' && password === 'admin123') {
-            this.isAuthenticated = true;
-            this.showDashboard();
-            this.showSuccess('Login successful');
-        } else {
-            this.showError('Invalid username or password');
+        try {
+            // Disable form
+            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            
+            // Authenticate with server using environment variables
+            const response = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.isAuthenticated = true;
+                this.showDashboard();
+                this.showSuccess('Login successful');
+            } else {
+                this.showError('Invalid username or password');
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            this.showError('Login failed. Please try again.');
+        } finally {
+            // Re-enable form
+            const submitBtn = this.elements.loginForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
         }
     }
 

@@ -464,10 +464,8 @@ class AdminDashboard {
             this.elements.deleteSelected.disabled = true;
             this.elements.deleteSelected.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
             
-            // Delete posts one by one
-            for (const postId of postsToDelete) {
-                await supabaseClient.deletePin(postId, 'admin');
-            }
+            // Use bulk delete for multiple posts
+            await supabaseClient.deletePins(postsToDelete);
             
             // Clear selection
             this.selectedPosts.clear();
@@ -510,7 +508,7 @@ class AdminDashboard {
     async deleteSinglePost(postId) {
         try {
             this.closeAdminConfirmModal();
-            await supabaseClient.deletePin(postId, 'admin');
+            await supabaseClient.adminDeletePin(postId);
             await this.loadPostsData();
             this.showSuccess('Post deleted successfully');
         } catch (error) {

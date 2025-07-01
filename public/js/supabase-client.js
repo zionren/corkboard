@@ -265,6 +265,30 @@ class SupabaseClient {
     }
 
     /**
+     * Delete a pin as admin (bypasses author check)
+     */
+    async adminDeletePin(id) {
+        this.ensureInitialized();
+        
+        const { data, error } = await this.client
+            .from('pins')
+            .delete()
+            .eq('id', id)
+            .select();
+
+        if (error) {
+            console.error('Error deleting pin:', error);
+            throw error;
+        }
+
+        if (!data || data.length === 0) {
+            throw new Error('Pin not found');
+        }
+
+        return data[0];
+    }
+
+    /**
      * Get analytics data for admin dashboard
      */
     async getAnalytics(date = new Date()) {

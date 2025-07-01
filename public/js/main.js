@@ -278,30 +278,13 @@ class CorkboardApp {
         if (this.filteredPins.length === 0) {
             this.elements.pinsGrid.classList.add('hidden');
             this.elements.emptyState.classList.remove('hidden');
-            // Hide bulk controls when no pins
-            const bulkControls = document.getElementById('bulk-controls');
-            if (bulkControls) bulkControls.style.display = 'none';
             return;
         }
         
         this.elements.emptyState.classList.add('hidden');
         this.elements.pinsGrid.classList.remove('hidden');
         
-        // Add bulk controls if they don't exist
-        this.ensureBulkControls();
-        
         this.elements.pinsGrid.innerHTML = this.filteredPins.map(pin => this.createPinHTML(pin)).join('');
-        
-        // Add event listeners for individual checkboxes
-        this.filteredPins.forEach(pin => {
-            const checkbox = document.getElementById(`select-pin-${pin.id}`);
-            if (checkbox) {
-                checkbox.addEventListener('change', () => this.updateBulkControls());
-            }
-        });
-        
-        // Update bulk controls state
-        this.updateBulkControls();
         
         // Add fade-in animation
         this.elements.pinsGrid.classList.add('fade-in');
@@ -321,7 +304,6 @@ class CorkboardApp {
         return `
             <div class="pin-card" data-pin-id="${pin.id}">
                 <div class="pin-header">
-                    ${isOwner ? `<input type="checkbox" class="select-pin-checkbox" id="select-pin-${pin.id}" data-pin-id="${pin.id}">` : ''}
                     <div class="pin-nickname">${this.escapeHtml(pin.nickname)}</div>
                     <div class="pin-timestamp">${timeAgo}</div>
                 </div>

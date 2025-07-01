@@ -278,13 +278,30 @@ class CorkboardApp {
         if (this.filteredPins.length === 0) {
             this.elements.pinsGrid.classList.add('hidden');
             this.elements.emptyState.classList.remove('hidden');
+            // Hide bulk controls when no pins
+            const bulkControls = document.getElementById('bulk-controls');
+            if (bulkControls) bulkControls.style.display = 'none';
             return;
         }
         
         this.elements.emptyState.classList.add('hidden');
         this.elements.pinsGrid.classList.remove('hidden');
         
+        // Add bulk controls if they don't exist
+        this.ensureBulkControls();
+        
         this.elements.pinsGrid.innerHTML = this.filteredPins.map(pin => this.createPinHTML(pin)).join('');
+        
+        // Add event listeners for individual checkboxes
+        this.filteredPins.forEach(pin => {
+            const checkbox = document.getElementById(`select-pin-${pin.id}`);
+            if (checkbox) {
+                checkbox.addEventListener('change', () => this.updateBulkControls());
+            }
+        });
+        
+        // Update bulk controls state
+        this.updateBulkControls();
         
         // Add fade-in animation
         this.elements.pinsGrid.classList.add('fade-in');
@@ -304,6 +321,7 @@ class CorkboardApp {
         return `
             <div class="pin-card" data-pin-id="${pin.id}">
                 <div class="pin-header">
+                    ${isOwner ? `<input type="checkbox" class="select-pin-checkbox" id="select-pin-${pin.id}" data-pin-id="${pin.id}">` : ''}
                     <div class="pin-nickname">${this.escapeHtml(pin.nickname)}</div>
                     <div class="pin-timestamp">${timeAgo}</div>
                 </div>
@@ -629,6 +647,142 @@ class CorkboardApp {
         const toast = document.getElementById(toastId);
         if (toast) {
             toast.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Ensure bulk controls exist
+     */
+    ensureBulkControls() {
+        let bulkControls = document.getElementById('bulk-controls');
+        if (!bulkControls) {
+            bulkControls = document.createElement('div');
+            bulkControls.id = 'bulk-controls';
+            bulkControls.className = 'bulk-controls';
+            bulkControls.innerHTML = `
+                <label class="select-all-label">
+                    <input type="checkbox" id="select-all-pins"> Select All
+                </label>
+                <button id="delete-selected-pins" class="pin-action-btn delete" disabled>
+                    <i class="fas fa-trash"></i> Delete Selected
+                </button>
+            `;
+            this.elements.pinsGrid.parentNode.insertBefore(bulkControls, this.elements.pinsGrid);
+            
+            // Add event listeners
+            document.getElementById('select-all-pins').addEventListener('change', (e) => this.handleSelectAll(e));
+            document.getElementById('delete-selected-pins').addEventListener('click', () => this.handleDeleteSelected());
+        }
+        bulkControls.style.display = 'flex';
+    }
+
+    /**
+     * Handle select all checkbox
+     */
+    handleSelectAll(e) {
+        const checked = e.target.checked;
+        this.filteredPins.forEach(pin => {
+            if (pin.author_id === this.currentUser) {
+                const checkbox = document.getElementById(`select-pin-${pin.id}`);
+                if (checkbox) {
+                    checkbox.checked = checked;
+                }
+            }
+        });
+        this.updateBulkControls();
+    }
+
+    /**
+     * Update bulk controls state
+     */
+    updateBulkControls() {
+        const selectAllCheckbox = document.getElementById('select-all-pins');
+        const deleteButton = document.getElementById('delete-selected-pins');
+        
+        if (!selectAllCheckbox || !deleteButton) return;
+        
+        const ownPins = this.filteredPins.filter(pin => pin.author_id === this.currentUser);
+        const selectedPins = ownPins.filter(pin => {
+            const checkbox = document.getElementById(`select-pin-${pin.id}`);
+            return checkbox && checkbox.checked;
+        });
+        
+        // Update select all checkbox state
+        if (ownPins.length === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        } else if (selectedPins.length === ownPins.length) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.indeterminate = false;
+        } else if (selectedPins.length > 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = true;
+        } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        }
+        
+        // Update delete button state
+        deleteButton.disabled = selectedPins.length === 0;
+    }
+
+    /**
+     * Handle delete selected pins
+     */
+    async handleDeleteSelected() {
+        const selectedPins = this.filteredPins.filter(pin => {
+            if (pin.author_id !== this.currentUser) return false;
+            const checkbox = document.getElementById(`select-pin-${pin.id}`);
+            return checkbox && checkbox.checked;
+        });
+        
+        if (selectedPins.length === 0) {
+            this.showError('No pins selected');
+            return;
+        }
+        
+        const confirmMessage = `Are you sure you want to delete ${selectedPins.length} selected pin${selectedPins.length > 1 ? 's' : ''}?`;
+        this.elements.confirmMessage.textContent = confirmMessage;
+        this.elements.confirmAction.onclick = () => this.performBulkDelete(selectedPins);
+        this.elements.confirmModal.classList.remove('hidden');
+    }
+
+    /**
+     * Perform bulk delete operation
+     */
+    async performBulkDelete(pinsToDelete) {
+        try {
+            this.closeConfirmModal();
+            
+            // Show loading state
+            const deleteButton = document.getElementById('delete-selected-pins');
+            deleteButton.disabled = true;
+            deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+            
+            // Delete pins one by one
+            for (const pin of pinsToDelete) {
+                await supabaseClient.deletePin(pin.id, this.currentUser);
+            }
+            
+            this.showSuccess(`${pinsToDelete.length} pin${pinsToDelete.length > 1 ? 's' : ''} deleted successfully`);
+            
+            // Reset select all checkbox
+            const selectAllCheckbox = document.getElementById('select-all-pins');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
+            
+        } catch (error) {
+            console.error('Error deleting pins:', error);
+            this.showError('Failed to delete some pins. Please try again.');
+        } finally {
+            // Reset delete button
+            const deleteButton = document.getElementById('delete-selected-pins');
+            if (deleteButton) {
+                deleteButton.disabled = true;
+                deleteButton.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+            }
         }
     }
 }

@@ -791,7 +791,7 @@ class AdminDashboard {
 
         // Count posts by main
         posts.forEach(post => {
-            const main = post.main_number?.toString() || 'council';
+            const main = post.main?.toString() || 'council';
             if (analytics.mainCounts.hasOwnProperty(main)) {
                 analytics.mainCounts[main]++;
             }

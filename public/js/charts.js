@@ -135,10 +135,10 @@ class ChartsManager {
                     borderWidth: 1,
                     borderRadius: 4,
                     borderSkipped: false,
-                    barThickness: 20,
-                    maxBarThickness: 25,
-                    categoryPercentage: 0.8,
-                    barPercentage: 0.9
+                    barThickness: 12,
+                    maxBarThickness: 15,
+                    categoryPercentage: 0.6,
+                    barPercentage: 0.7
                 }]
             },
             options: {
@@ -169,8 +169,8 @@ class ChartsManager {
                                 size: 11
                             }
                         },
-                        barThickness: 20,
-                        maxBarThickness: 25
+                        barThickness: 12,
+                        maxBarThickness: 15
                     }
                 },
                 elements: {
